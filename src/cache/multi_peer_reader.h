@@ -1,117 +1,101 @@
 #pragma once
 
-#include <set>
-#include <chrono>
-#include <boost/asio/ip/udp.hpp>
-#include "../response_reader.h"
 #include "../namespaces.h"
+#include "../response_reader.h"
+#include "../session.h"
+#include "../util/trace.h"
 #include "dht_lookup.h"
 #include "hash_list.h"
-#include "../util/trace.h"
-#include "../session.h"
+#include "ouiservice/i2p/fwd.h"
 #include "resource_id.h"
 #include "util/crypto_stream_key.h"
-#include "ouiservice/i2p/fwd.h"
+#include <boost/asio/ip/udp.hpp>
+#include <chrono>
+#include <set>
 
 namespace ouinet::cache {
 
 class MultiPeerReader : public http_response::AbstractReader {
 private:
-    class Peer;
-    class Peers;
-    struct Block;
-    struct PreFetch;
-    struct PreFetchSequential;
-    struct PreFetchParallel;
+  class Peer;
+  class Peers;
+  struct Block;
+  struct PreFetch;
+  struct PreFetchSequential;
+  struct PreFetchParallel;
 
-    enum class State { active, done, closed };
+  enum class State { active, done, closed };
 
 public:
-    // Use this for local cache and LAN retrieval only.
-    MultiPeerReader( AsioExecutor ex
-                   , ResourceId
-                   , CryptoStreamKey
-                   , sign::PublicKey cache_pk
-                   , std::set<asio::ip::udp::endpoint> lan_peers
-                   , std::set<asio::ip::udp::endpoint> lan_my_endpoints
-                   , std::shared_ptr<unsigned> newest_proto_seen
-                   , Trace);
+  // Use this for local cache and LAN retrieval only.
+  MultiPeerReader(AsioExecutor ex, ResourceId, CryptoStreamKey,
+                  sign::PublicKey cache_pk,
+                  std::set<asio::ip::udp::endpoint> lan_peers,
+                  std::set<asio::ip::udp::endpoint> lan_my_endpoints,
+                  std::shared_ptr<unsigned> newest_proto_seen, Trace);
 
-    // Use this to include peers on the Internet.
-    MultiPeerReader( AsioExecutor ex
-                   , ResourceId
-                   , CryptoStreamKey
-                   , sign::PublicKey cache_pk
-                   , std::set<asio::ip::udp::endpoint> lan_peers
-                   , std::shared_ptr<DhtLookup> peer_lookup
-                   , std::shared_ptr<unsigned> newest_proto_seen
-                   , Trace);
+  // Use this to include peers on the Internet.
+  MultiPeerReader(AsioExecutor ex, ResourceId, CryptoStreamKey,
+                  sign::PublicKey cache_pk,
+                  std::set<asio::ip::udp::endpoint> lan_peers,
+                  std::shared_ptr<DhtLookup> peer_lookup,
+                  std::shared_ptr<unsigned> newest_proto_seen, Trace);
 
-    // Use this to include I2P peers via BEP3 tracker.
-    MultiPeerReader( AsioExecutor ex
-                   , ResourceId
-                   , CryptoStreamKey
-                   , sign::PublicKey cache_pk
-                   , std::shared_ptr<I2pTrackerLookup>
-                   , std::shared_ptr<I2pSession> i2p_session
-                   , std::shared_ptr<unsigned> newest_proto_seen
-                   , Trace);
+  // Use this to include I2P peers via BEP3 tracker.
+  MultiPeerReader(AsioExecutor ex, ResourceId, CryptoStreamKey,
+                  sign::PublicKey cache_pk, std::shared_ptr<I2pTrackerLookup>,
+                  std::shared_ptr<I2pSession> i2p_session,
+                  std::shared_ptr<unsigned> newest_proto_seen, Trace);
 
-    MultiPeerReader(MultiPeerReader&&) = delete;
-    MultiPeerReader(const MultiPeerReader&) = delete;
+  MultiPeerReader(MultiPeerReader &&) = delete;
+  MultiPeerReader(const MultiPeerReader &) = delete;
 
-    std::expected<std::optional<http_response::Part>, sys::error_code>
-    async_read_part(Async) override;
+  std::expected<std::optional<http_response::Part>, sys::error_code>
+      async_read_part(Async) override;
 
-    bool is_done() const override
-    {
-        return _state == State::done;
-    }
+  bool is_done() const override { return _state == State::done; }
 
-    void close() override;
+  void close() override;
 
-    ~MultiPeerReader();
+  ~MultiPeerReader();
 
-    AsioExecutor get_executor() override
-    {
-        return _executor;
-    }
+  AsioExecutor get_executor() override { return _executor; }
 
 private:
-    std::expected<std::optional<http_response::Part>, sys::error_code>
-    async_read_part_impl(Async);
+  std::expected<std::optional<http_response::Part>, sys::error_code>
+      async_read_part_impl(Async);
 
-    std::expected<std::optional<Block>, sys::error_code>
-    fetch_block(size_t block_id, Async);
+  std::expected<std::optional<Block>, sys::error_code>
+  fetch_block(size_t block_id, Async);
 
-    void unmark_as_good(Peer& peer);
+  void unmark_as_good(Peer &peer);
 
-    void mark_done();
+  void mark_done();
 
-    std::expected<std::unique_ptr<PreFetch>, sys::error_code>
-    new_fetch_job(size_t block_id, Peer* last_peer, Async);
+  std::expected<std::unique_ptr<PreFetch>, sys::error_code>
+  new_fetch_job(size_t block_id, Peer *last_peer, Async);
 
-    static constexpr std::chrono::seconds BEP5_HASH_LIST_TIMEOUT{10};
-    static constexpr std::chrono::seconds BEP3_HASH_LIST_TIMEOUT{30};
+  static constexpr std::chrono::seconds BEP5_HASH_LIST_TIMEOUT{10};
+  static constexpr std::chrono::seconds BEP3_HASH_LIST_TIMEOUT{30};
 
 private:
-    AsioExecutor _executor;
-    Cancel _lifetime_cancel;
+  AsioExecutor _executor;
+  Cancel _lifetime_cancel;
 
-    boost::optional<HashList> _reference_hash_list;
-    std::unique_ptr<Peers> _peers;
-    Trace _trace;
-    bool _head_sent = false;
-    size_t _block_id = 0;
+  boost::optional<HashList> _reference_hash_list;
+  std::unique_ptr<Peers> _peers;
+  Trace _trace;
+  bool _head_sent = false;
+  size_t _block_id = 0;
 
-    std::string _next_chunk_hdr_ext;
-    std::optional<http_response::ChunkBody> _next_chunk_body;
-    std::optional<http_response::Trailer> _next_trailer;
-    bool _last_chunk_hdr_sent = false;
+  std::string _next_chunk_hdr_ext;
+  std::optional<http_response::ChunkBody> _next_chunk_body;
+  std::optional<http_response::Trailer> _next_trailer;
+  bool _last_chunk_hdr_sent = false;
 
-    State _state = State::active;
+  State _state = State::active;
 
-    std::unique_ptr<PreFetch> _pre_fetch;
+  std::unique_ptr<PreFetch> _pre_fetch;
 };
 
-} // namespaces
+} // namespace ouinet::cache

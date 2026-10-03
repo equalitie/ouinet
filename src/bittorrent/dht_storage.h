@@ -5,16 +5,16 @@
 
 #include <chrono>
 #include <deque>
-#include <string>
 #include <map>
+#include <string>
 
 #include "bencoding.h"
 #include "mutable_data.h"
 #include "node_id.h"
 
-#include "../util/sign.h"
-#include "../util/executor.h"
 #include "../util/cancel.h"
+#include "../util/executor.h"
+#include "../util/sign.h"
 
 namespace ouinet {
 
@@ -29,124 +29,125 @@ using ouinet::util::AsioExecutor;
 namespace detail {
 
 class DhtWriteTokenStorage {
-    public:
-    const int TOKEN_VALIDITY_SECONDS = 60 * 15;
-    const int SECRET_REFRESH_TIME_SECONDS = 60 * 5;
+public:
+  const int TOKEN_VALIDITY_SECONDS = 60 * 15;
+  const int SECRET_REFRESH_TIME_SECONDS = 60 * 5;
 
-    public:
-    DhtWriteTokenStorage();
-    std::string generate_token(asio::ip::address address, NodeID id);
-    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token);
+public:
+  DhtWriteTokenStorage();
+  std::string generate_token(asio::ip::address address, NodeID id);
+  bool verify_token(asio::ip::address address, NodeID id,
+                    const boost::string_view token);
 
-    private:
-    void expire();
+private:
+  void expire();
 
-    private:
-    std::string _salt;
-    struct Secret {
-        std::string secret;
-        std::chrono::steady_clock::time_point expires;
-    };
-    std::deque<Secret> _secrets;
-    std::chrono::steady_clock::time_point _last_generated;
+private:
+  std::string _salt;
+  struct Secret {
+    std::string secret;
+    std::chrono::steady_clock::time_point expires;
+  };
+  std::deque<Secret> _secrets;
+  std::chrono::steady_clock::time_point _last_generated;
 };
 
 class Swarm {
-    public:
-    /*
-     * This number based on vague hints. I could not find any proper
-     * specification on recommended validity times, and this could be
-     * completely wrong.
-     */
-    const int ANNOUNCE_VALIDITY_SECONDS = 3600 * 2;
+public:
+  /*
+   * This number based on vague hints. I could not find any proper
+   * specification on recommended validity times, and this could be
+   * completely wrong.
+   */
+  const int ANNOUNCE_VALIDITY_SECONDS = 3600 * 2;
 
-    public:
-    void add(tcp::endpoint endpoint);
-    std::vector<tcp::endpoint> list(unsigned int count);
-    void expire();
-    bool empty() const { return _peers.empty(); }
+public:
+  void add(tcp::endpoint endpoint);
+  std::vector<tcp::endpoint> list(unsigned int count);
+  void expire();
+  bool empty() const { return _peers.empty(); }
 
-    private:
-    struct Peer {
-        tcp::endpoint endpoint;
-        std::chrono::steady_clock::time_point last_seen;
-    };
-    std::vector<Peer> _peers;
-    std::map<tcp::endpoint, size_t> _peer_indices;
+private:
+  struct Peer {
+    tcp::endpoint endpoint;
+    std::chrono::steady_clock::time_point last_seen;
+  };
+  std::vector<Peer> _peers;
+  std::map<tcp::endpoint, size_t> _peer_indices;
 };
 
 } // namespace detail
 
 class OUINET_COMMON_API Tracker {
-    public:
-    Tracker(const AsioExecutor&);
-    ~Tracker();
+public:
+  Tracker(const AsioExecutor &);
+  ~Tracker();
 
-    std::string generate_token(asio::ip::address address, NodeID id)
-    {
-        return _token_storage.generate_token(address, id);
-    }
+  std::string generate_token(asio::ip::address address, NodeID id) {
+    return _token_storage.generate_token(address, id);
+  }
 
-    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token)
-    {
-        return _token_storage.verify_token(address, id, token);
-    }
+  bool verify_token(asio::ip::address address, NodeID id,
+                    const boost::string_view token) {
+    return _token_storage.verify_token(address, id, token);
+  }
 
-    void add_peer(NodeID swarm, tcp::endpoint endpoint);
-    std::vector<tcp::endpoint> list_peers(NodeID swarm, unsigned int count);
+  void add_peer(NodeID swarm, tcp::endpoint endpoint);
+  std::vector<tcp::endpoint> list_peers(NodeID swarm, unsigned int count);
 
-    private:
-    AsioExecutor _exec;
-    detail::DhtWriteTokenStorage _token_storage;
-    std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
-    Cancel _terminate_signal;
+private:
+  AsioExecutor _exec;
+  detail::DhtWriteTokenStorage _token_storage;
+  std::map<NodeID, std::unique_ptr<detail::Swarm>> _swarms;
+  Cancel _terminate_signal;
 };
 
 class OUINET_COMMON_API DataStore {
-    public:
-    /*
-     * Validity specified at
-     * http://www.bittorrent.org/beps/bep_0044.html#expiration
-     */
-    const int PUT_VALIDITY_SECONDS = 3600 * 2;
+public:
+  /*
+   * Validity specified at
+   * http://www.bittorrent.org/beps/bep_0044.html#expiration
+   */
+  const int PUT_VALIDITY_SECONDS = 3600 * 2;
 
-    public:
-    DataStore(const AsioExecutor&);
-    ~DataStore();
+public:
+  DataStore(const AsioExecutor &);
+  ~DataStore();
 
-    std::string generate_token(asio::ip::address address, NodeID id)
-    {
-        return _token_storage.generate_token(address, id);
-    }
+  std::string generate_token(asio::ip::address address, NodeID id) {
+    return _token_storage.generate_token(address, id);
+  }
 
-    bool verify_token(asio::ip::address address, NodeID id, const boost::string_view token)
-    {
-        return _token_storage.verify_token(address, id, token);
-    }
+  bool verify_token(asio::ip::address address, NodeID id,
+                    const boost::string_view token) {
+    return _token_storage.verify_token(address, id, token);
+  }
 
-    static NodeID immutable_get_id(BencodedValue value);
-    void put_immutable(BencodedValue value);
-    boost::optional<BencodedValue> get_immutable(NodeID id);
+  static NodeID immutable_get_id(BencodedValue value);
+  void put_immutable(BencodedValue value);
+  boost::optional<BencodedValue> get_immutable(NodeID id);
 
-    static NodeID mutable_get_id(sign::PublicKey public_key, boost::string_view salt);
-    void put_mutable(MutableDataItem item);
-    boost::optional<MutableDataItem> get_mutable(NodeID id);
+  static NodeID mutable_get_id(sign::PublicKey public_key,
+                               boost::string_view salt);
+  void put_mutable(MutableDataItem item);
+  boost::optional<MutableDataItem> get_mutable(NodeID id);
 
-    private:
-    struct ImmutableStoredItem {
-        BencodedValue value;
-        std::chrono::steady_clock::time_point last_seen;
-    };
-    struct MutableStoredItem {
-        MutableDataItem item;
-        std::chrono::steady_clock::time_point last_seen;
-    };
+private:
+  struct ImmutableStoredItem {
+    BencodedValue value;
+    std::chrono::steady_clock::time_point last_seen;
+  };
+  struct MutableStoredItem {
+    MutableDataItem item;
+    std::chrono::steady_clock::time_point last_seen;
+  };
 
-    AsioExecutor _exec;
-    detail::DhtWriteTokenStorage _token_storage;
-    std::map<NodeID, ImmutableStoredItem> _immutable_data;
-    std::map<NodeID, MutableStoredItem> _mutable_data;
-    Cancel _terminate_signal;
+  AsioExecutor _exec;
+  detail::DhtWriteTokenStorage _token_storage;
+  std::map<NodeID, ImmutableStoredItem> _immutable_data;
+  std::map<NodeID, MutableStoredItem> _mutable_data;
+  Cancel _terminate_signal;
 };
 
-}} // namespaces
+} // namespace bittorrent
+} // namespace ouinet

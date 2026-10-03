@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-#include <optional>
 #include "api.h"
+#include <optional>
+#include <string>
 
 namespace ouinet::cache {
 
@@ -13,35 +13,32 @@ namespace ouinet::cache {
 // out of it without brute force or guessing.
 class OUINET_COMMON_API ResourceId {
 public:
-    static ResourceId from_url(std::string_view url);
+  static ResourceId from_url(std::string_view url);
 
-    static std::optional<ResourceId> from_hex(std::string_view hex);
-    static std::optional<ResourceId> from_hex(std::wstring_view hex);
+  static std::optional<ResourceId> from_hex(std::string_view hex);
+  static std::optional<ResourceId> from_hex(std::wstring_view hex);
 
-    ResourceId(ResourceId const&) = default;
-    ResourceId(ResourceId &&) = default;
-    ResourceId& operator=(ResourceId const&) = default;
-    ResourceId& operator=(ResourceId &&) = default;
+  ResourceId(ResourceId const &) = default;
+  ResourceId(ResourceId &&) = default;
+  ResourceId &operator=(ResourceId const &) = default;
+  ResourceId &operator=(ResourceId &&) = default;
 
-    const std::string& hex_string() const;
+  const std::string &hex_string() const;
 
-    bool operator<(const ResourceId& other) const {
-        return _repr < other._repr;
-    }
+  bool operator<(const ResourceId &other) const { return _repr < other._repr; }
 
-    bool operator==(const ResourceId& other) const {
-        return _repr == other._repr;
-    }
+  bool operator==(const ResourceId &other) const {
+    return _repr == other._repr;
+  }
 
 private:
-    explicit ResourceId(std::string repr);
+  explicit ResourceId(std::string repr);
 
 private:
-    std::string _repr;
+  std::string _repr;
 };
 
 OUINET_COMMON_API
-std::ostream& operator<<(std::ostream&, const ouinet::cache::ResourceId&);
+std::ostream &operator<<(std::ostream &, const ouinet::cache::ResourceId &);
 
 } // namespace ouinet::cache
-

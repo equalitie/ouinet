@@ -1,7 +1,7 @@
 #pragma once
 
-#include <boost/asio/spawn.hpp>
 #include "namespaces.h"
+#include <boost/asio/spawn.hpp>
 
 namespace ouinet {
 
@@ -47,24 +47,27 @@ namespace ouinet {
  *
  */
 
-template<class Ret>
-inline
-Ret or_throw( asio::yield_context yield
-            , const sys::error_code& ec
-            , Ret&& ret = {})
-{
-    if (!ec) return std::forward<Ret>(ret);
-    if (yield.ec_) { *yield.ec_ = ec; }
-    else { throw sys::system_error(ec); }
+template <class Ret>
+inline Ret or_throw(asio::yield_context yield, const sys::error_code &ec,
+                    Ret &&ret = {}) {
+  if (!ec)
     return std::forward<Ret>(ret);
+  if (yield.ec_) {
+    *yield.ec_ = ec;
+  } else {
+    throw sys::system_error(ec);
+  }
+  return std::forward<Ret>(ret);
 }
 
-inline
-void or_throw(asio::yield_context yield, const sys::error_code& ec)
-{
-    if (!ec) return;
-    if (yield.ec_) { *yield.ec_ = ec; }
-    else { throw sys::system_error(ec); }
+inline void or_throw(asio::yield_context yield, const sys::error_code &ec) {
+  if (!ec)
+    return;
+  if (yield.ec_) {
+    *yield.ec_ = ec;
+  } else {
+    throw sys::system_error(ec);
+  }
 }
 
-}
+} // namespace ouinet

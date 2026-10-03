@@ -5,32 +5,31 @@
 namespace ouinet {
 
 namespace bittorrent {
-    class DhtBase;
-    class Bep5PeriodicAnnouncer;
-}
+class DhtBase;
+class Bep5PeriodicAnnouncer;
+} // namespace bittorrent
 
 namespace ouiservice {
 
-class Bep5Server : public OuiServiceImplementationServer
-{
+class Bep5Server : public OuiServiceImplementationServer {
 public:
-    Bep5Server( std::shared_ptr<bittorrent::DhtBase>
-              , boost::asio::ssl::context* ssl_context
-              , std::string swarm_name
-              , Trace trace);
+  Bep5Server(std::shared_ptr<bittorrent::DhtBase>,
+             boost::asio::ssl::context *ssl_context, std::string swarm_name,
+             Trace trace);
 
-    [[nodiscard]]
-    sys::error_code start_listen(Async) override;
-    void stop_listen() override;
+  [[nodiscard]]
+  sys::error_code start_listen(Async) override;
+  void stop_listen() override;
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> accept(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> accept(Async) override;
 
-    ~Bep5Server();
+  ~Bep5Server();
 
 private:
-    std::unique_ptr<MultiUtpServer> _multi_utp_server;
-    std::unique_ptr<bittorrent::Bep5PeriodicAnnouncer> _announcer;
+  std::unique_ptr<MultiUtpServer> _multi_utp_server;
+  std::unique_ptr<bittorrent::Bep5PeriodicAnnouncer> _announcer;
 };
 
-}} // namespaces
+} // namespace ouiservice
+} // namespace ouinet

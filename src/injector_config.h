@@ -3,31 +3,30 @@
 #include <algorithm>
 #include <set>
 
-#include <boost/program_options.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl/context.hpp>
-#include <boost/regex.hpp>
-#include <boost/filesystem/path.hpp>
 #include "api.h"
-#include "constants.h"
 #include "bittorrent/bootstrap.h"
-#include "ouiservice/i2p/service.h"
+#include "constants.h"
 #include "ouiservice/i2p/destination_keypair.h"
+#include "ouiservice/i2p/service.h"
 #include "util/sign.h"
 #include "util/str.h"
 #include "util/trace.h"
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <boost/asio/ssl/context.hpp>
+#include <boost/filesystem/path.hpp>
+#include <boost/program_options.hpp>
+#include <boost/regex.hpp>
 
 #include "cxx/dns.h"
 
 namespace ouinet {
-//TODO: move this to somewhere where both client and injector config has access to
+// TODO: move this to somewhere where both client and injector config has access
+// to
 #define _MAX_I2P_HOPS 8
 
-template<class... Args>
-inline
-std::runtime_error error(Args&&... args) {
-    return std::runtime_error(util::str(std::forward<Args>(args)...));
+template <class... Args> inline std::runtime_error error(Args &&...args) {
+  return std::runtime_error(util::str(std::forward<Args>(args)...));
 }
 
 #define _HTTP_LOG_FILE_NAME "access.log"
@@ -35,148 +34,132 @@ static const fs::path http_log_file_name{_HTTP_LOG_FILE_NAME};
 
 class OUINET_INJECTOR_API InjectorConfig {
 public:
-    using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
+  using ExtraBtBsServers = std::set<bittorrent::bootstrap::Address>;
 
-    InjectorConfig() = default;
-    InjectorConfig(InjectorConfig&&) = default;
-    InjectorConfig& operator=(InjectorConfig&&) = default;
+  InjectorConfig() = default;
+  InjectorConfig(InjectorConfig &&) = default;
+  InjectorConfig &operator=(InjectorConfig &&) = default;
 
-    InjectorConfig(const InjectorConfig&) = delete;
-    InjectorConfig& operator=(const InjectorConfig&) = delete;
+  InjectorConfig(const InjectorConfig &) = delete;
+  InjectorConfig &operator=(const InjectorConfig &) = delete;
 
-    // May thow on error.
-    InjectorConfig(int argc, const char** argv);
+  // May thow on error.
+  InjectorConfig(int argc, const char **argv);
 
-    boost::program_options::options_description options_description();
+  boost::program_options::options_description options_description();
 
-    bool is_help() const
-    { return _is_help; }
+  bool is_help() const { return _is_help; }
 
-    const ExtraBtBsServers& bt_bootstrap_extras() const {
-        return _bt_bootstrap_extras;
-    }
+  const ExtraBtBsServers &bt_bootstrap_extras() const {
+    return _bt_bootstrap_extras;
+  }
 
-    bool bt_bootstrap_no_default() const {
-        return _bt_bootstrap_no_default;
-    }
+  bool bt_bootstrap_no_default() const { return _bt_bootstrap_no_default; }
 
-    bool bt_allow_martians() const {
-        return _bt_allow_martians;
-    }
+  bool bt_allow_martians() const { return _bt_allow_martians; }
 
-    uint32_t udp_mux_rx_limit_in_bytes() const {
-        // The value is set in Kbps in the configuration but required in bytes
-        // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
-        return _udp_mux_rx_limit * 1000 / 8;
-    }
+  uint32_t udp_mux_rx_limit_in_bytes() const {
+    // The value is set in Kbps in the configuration but required in bytes
+    // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
+    return _udp_mux_rx_limit * 1000 / 8;
+  }
 
-    boost::optional<size_t> open_file_limit() const
-    { return _open_file_limit; }
+  boost::optional<size_t> open_file_limit() const { return _open_file_limit; }
 
-    boost::filesystem::path repo_root() const
-    { return _repo_root; }
+  boost::filesystem::path repo_root() const { return _repo_root; }
 
-    bool listen_on_i2p() const
-    { return _listen_on_i2p; }
+  bool listen_on_i2p() const { return _listen_on_i2p; }
 
-    size_t i2p_hops_per_tunnel() const {
-      return _i2p_hops_per_tunnel;
-    }
+  size_t i2p_hops_per_tunnel() const { return _i2p_hops_per_tunnel; }
 
-    std::string bep5_injector_swarm_name() const
-    {
-        return _bep5_injector_swarm_name;
-    }
+  std::string bep5_injector_swarm_name() const {
+    return _bep5_injector_swarm_name;
+  }
 
-    asio::ip::udp::endpoint bittorrent_endpoint() const
-    {
-        if (_utp_tls_endpoint) return *_utp_tls_endpoint;
-        if (_utp_endpoint) return *_utp_endpoint;
-        return asio::ip::udp::endpoint(asio::ip::address_v4::any(), 4567);
-    }
+  asio::ip::udp::endpoint bittorrent_endpoint() const {
+    if (_utp_tls_endpoint)
+      return *_utp_tls_endpoint;
+    if (_utp_endpoint)
+      return *_utp_endpoint;
+    return asio::ip::udp::endpoint(asio::ip::address_v4::any(), 4567);
+  }
 
-    boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const
-    { return _tcp_endpoint; }
+  boost::optional<asio::ip::tcp::endpoint> tcp_endpoint() const {
+    return _tcp_endpoint;
+  }
 
-    boost::optional<asio::ip::tcp::endpoint> tcp_tls_endpoint() const
-    { return _tcp_tls_endpoint; }
+  boost::optional<asio::ip::tcp::endpoint> tcp_tls_endpoint() const {
+    return _tcp_tls_endpoint;
+  }
 
-    boost::optional<asio::ip::udp::endpoint> utp_endpoint() const
-    { return _utp_endpoint; }
+  boost::optional<asio::ip::udp::endpoint> utp_endpoint() const {
+    return _utp_endpoint;
+  }
 
-    boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const
-    { return _utp_tls_endpoint; }
+  boost::optional<asio::ip::udp::endpoint> utp_tls_endpoint() const {
+    return _utp_tls_endpoint;
+  }
 
-    std::string credentials() const
-    { return _credentials; }
+  std::string credentials() const { return _credentials; }
 
-    bool is_proxy_enabled() const
-    { return !_disable_proxy; }
+  bool is_proxy_enabled() const { return !_disable_proxy; }
 
-    boost::optional<boost::regex> target_rx() const
-    { return _target_rx; }
+  boost::optional<boost::regex> target_rx() const { return _target_rx; }
 
-    bool is_private_target_allowed() const
-    { return _allow_private_targets; }
+  bool is_private_target_allowed() const { return _allow_private_targets; }
 
-    dns::Config dns_config() const
-    { return _dns_config; }
+  dns::Config dns_config() const { return _dns_config; }
 
-    sign::SecretKey cache_private_key() const
-    { return _ed25519_private_key; }
+  sign::SecretKey cache_private_key() const { return _ed25519_private_key; }
 
-    asio::ssl::context& origin_ssl_ctx() {
-        return _origin_ssl_ctx;
-    }
+  asio::ssl::context &origin_ssl_ctx() { return _origin_ssl_ctx; }
 
-    const std::optional<I2pService::Config>& i2p_service_config() const {
-        return _i2p_service_config;
-    }
+  const std::optional<I2pService::Config> &i2p_service_config() const {
+    return _i2p_service_config;
+  }
 
-    void store_i2p_destination_keypair(const I2pDestinationKeypair&) const;
-    std::optional<I2pDestinationKeypair> load_i2p_destination_keypair() const;
+  void store_i2p_destination_keypair(const I2pDestinationKeypair &) const;
+  std::optional<I2pDestinationKeypair> load_i2p_destination_keypair() const;
 
-    const Trace& trace_root() const {
-        return _trace_root;
-    }
+  const Trace &trace_root() const { return _trace_root; }
 
 private:
-    void setup_ed25519_private_key(const std::string& hex);
+  void setup_ed25519_private_key(const std::string &hex);
 
-    bool _is_http_log_file_enabled() const;
+  bool _is_http_log_file_enabled() const;
 
-    void _is_http_log_file_enabled(bool v);
+  void _is_http_log_file_enabled(bool v);
 
 private:
-    bool _is_help = false;
-    boost::filesystem::path _repo_root;
-    ExtraBtBsServers _bt_bootstrap_extras;
-    bool _bt_bootstrap_no_default = false;
-    bool _bt_allow_martians = false;
-    uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
-    boost::optional<size_t> _open_file_limit;
-    bool _listen_on_i2p = false;
-    size_t _i2p_hops_per_tunnel = 3;
+  bool _is_help = false;
+  boost::filesystem::path _repo_root;
+  ExtraBtBsServers _bt_bootstrap_extras;
+  bool _bt_bootstrap_no_default = false;
+  bool _bt_allow_martians = false;
+  uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_injector;
+  boost::optional<size_t> _open_file_limit;
+  bool _listen_on_i2p = false;
+  size_t _i2p_hops_per_tunnel = 3;
 
-    std::string _tls_ca_cert_store_dir;
-    std::vector<std::string> _tls_ca_cert_store_files;
-    asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+  std::string _tls_ca_cert_store_dir;
+  std::vector<std::string> _tls_ca_cert_store_files;
+  asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
 
-    boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
-    boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
-    boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
-    boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
-    std::string _bep5_injector_swarm_name;
-    boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
-    std::string _credentials;
-    bool _disable_proxy = false;
-    boost::optional<boost::regex> _target_rx;
-    bool _allow_private_targets = false;
-    sign::SecretKey _ed25519_private_key;
+  boost::optional<asio::ip::tcp::endpoint> _tcp_endpoint;
+  boost::optional<asio::ip::tcp::endpoint> _tcp_tls_endpoint;
+  boost::optional<asio::ip::udp::endpoint> _utp_endpoint;
+  boost::optional<asio::ip::udp::endpoint> _utp_tls_endpoint;
+  std::string _bep5_injector_swarm_name;
+  boost::filesystem::path OUINET_CONF_FILE = "ouinet-injector.conf";
+  std::string _credentials;
+  bool _disable_proxy = false;
+  boost::optional<boost::regex> _target_rx;
+  bool _allow_private_targets = false;
+  sign::SecretKey _ed25519_private_key;
 
-    dns::Config _dns_config;
-    std::optional<I2pService::Config> _i2p_service_config;
-    Trace _trace_root;
+  dns::Config _dns_config;
+  std::optional<I2pService::Config> _i2p_service_config;
+  Trace _trace_root;
 };
 
-} // ouinet namespace
+} // namespace ouinet

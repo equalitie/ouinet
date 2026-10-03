@@ -1,9 +1,9 @@
 #pragma once
 
+#include "util/unique_function.h"
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
-#include <boost/asio/any_io_executor.hpp>
-#include "util/unique_function.h"
 
 namespace ouinet {
 
@@ -22,324 +22,301 @@ namespace ouinet {
  *     t.async_read_some(my_buffer, yield[ec]);
  */
 
-template<class InnerStream> class TimeoutStream {
+template <class InnerStream> class TimeoutStream {
 public:
-    using executor_type = asio::any_io_executor;
-    using next_layer_type = InnerStream;
-    using endpoint_type = typename InnerStream::endpoint_type;
+  using executor_type = asio::any_io_executor;
+  using next_layer_type = InnerStream;
+  using endpoint_type = typename InnerStream::endpoint_type;
 
 private:
-    using Timer     = boost::asio::steady_timer;
-    using Clock     = typename Timer::clock_type;
-    using Duration  = typename Timer::duration;
-    using TimePoint = typename Timer::time_point;
-    using WriteHandler   = util::unique_function<void(const sys::error_code&, size_t)>;
-    using ReadHandler    = util::unique_function<void(const sys::error_code&, size_t)>;
-    using ConnectHandler = util::unique_function<void(const sys::error_code&)>;
+  using Timer = boost::asio::steady_timer;
+  using Clock = typename Timer::clock_type;
+  using Duration = typename Timer::duration;
+  using TimePoint = typename Timer::time_point;
+  using WriteHandler =
+      util::unique_function<void(const sys::error_code &, size_t)>;
+  using ReadHandler =
+      util::unique_function<void(const sys::error_code &, size_t)>;
+  using ConnectHandler = util::unique_function<void(const sys::error_code &)>;
 
-    class Deadline : public std::enable_shared_from_this<Deadline> {
-        using Parent = std::enable_shared_from_this<Deadline>;
-    public:
-        Deadline(executor_type& exec)
-            : _timer(exec)
-        {}
+  class Deadline : public std::enable_shared_from_this<Deadline> {
+    using Parent = std::enable_shared_from_this<Deadline>;
 
-        void start(Duration d, std::function<void()> h)
-        {
-            _handler = std::move(h);
+  public:
+    Deadline(executor_type &exec) : _timer(exec) {}
 
-            _desired_deadline = Clock::now() + d;
+    void start(Duration d, std::function<void()> h) {
+      _handler = std::move(h);
 
-            if (_expires_at) {
-                if (*_desired_deadline < _expires_at) {
-                    _timer.cancel();
-                }
+      _desired_deadline = Clock::now() + d;
 
-                return;
-            }
-
-            _expires_at = _desired_deadline;
-            _timer.expires_at(*_expires_at);
-
-            _timer.async_wait(
-                [this, self = Parent::shared_from_this()]
-                (const sys::error_code&) { on_timer(); });
+      if (_expires_at) {
+        if (*_desired_deadline < _expires_at) {
+          _timer.cancel();
         }
 
-        void stop() {
-            _handler = nullptr;
-            _desired_deadline = boost::none;
+        return;
+      }
 
-            if (_expires_at) {
-                _expires_at = Clock::now();
-                _timer.cancel();
-            }
-        }
+      _expires_at = _desired_deadline;
+      _timer.expires_at(*_expires_at);
 
-    private:
-        void on_timer() {
-            _expires_at = boost::none;
+      _timer.async_wait([this, self = Parent::shared_from_this()](
+                            const sys::error_code &) { on_timer(); });
+    }
 
-            if (!_desired_deadline) {
-                return;
-            }
+    void stop() {
+      _handler = nullptr;
+      _desired_deadline = boost::none;
 
-            auto now = Clock::now();
+      if (_expires_at) {
+        _expires_at = Clock::now();
+        _timer.cancel();
+      }
+    }
 
-            if (now < *_desired_deadline) {
-                return start(*_desired_deadline - now, std::move(_handler));
-            }
+  private:
+    void on_timer() {
+      _expires_at = boost::none;
 
-            auto h = std::move(_handler);
-            h();
-        }
+      if (!_desired_deadline) {
+        return;
+      }
 
-    private:
-        Timer _timer;
-        boost::optional<TimePoint> _expires_at;
-        boost::optional<TimePoint> _desired_deadline;
-        std::function<void()> _handler;
-    };
+      auto now = Clock::now();
 
-    struct State {
-        InnerStream inner;
+      if (now < *_desired_deadline) {
+        return start(*_desired_deadline - now, std::move(_handler));
+      }
 
-        // XXX: Use shared_ptr's aliasing constructor to avoid
-        // unnecessary allocations.
-        std::shared_ptr<Deadline> read_deadline;
-        std::shared_ptr<Deadline> write_deadline;
-        std::shared_ptr<Deadline> connect_deadline;
+      auto h = std::move(_handler);
+      h();
+    }
 
-        ReadHandler read_handler;
-        WriteHandler write_handler;
-        ConnectHandler connect_handler;
+  private:
+    Timer _timer;
+    boost::optional<TimePoint> _expires_at;
+    boost::optional<TimePoint> _desired_deadline;
+    std::function<void()> _handler;
+  };
 
-        State(InnerStream&& in)
-            : inner(std::move(in))
-        {
-            auto exec = inner.get_executor();
+  struct State {
+    InnerStream inner;
 
-            read_deadline    = std::make_shared<Deadline>(exec);
-            write_deadline   = std::make_shared<Deadline>(exec);
-            connect_deadline = std::make_shared<Deadline>(exec);
-        }
+    // XXX: Use shared_ptr's aliasing constructor to avoid
+    // unnecessary allocations.
+    std::shared_ptr<Deadline> read_deadline;
+    std::shared_ptr<Deadline> write_deadline;
+    std::shared_ptr<Deadline> connect_deadline;
 
-        bool is_open() const { return inner.is_open(); }
-    };
+    ReadHandler read_handler;
+    WriteHandler write_handler;
+    ConnectHandler connect_handler;
+
+    State(InnerStream &&in) : inner(std::move(in)) {
+      auto exec = inner.get_executor();
+
+      read_deadline = std::make_shared<Deadline>(exec);
+      write_deadline = std::make_shared<Deadline>(exec);
+      connect_deadline = std::make_shared<Deadline>(exec);
+    }
+
+    bool is_open() const { return inner.is_open(); }
+  };
 
 public:
-    TimeoutStream() {}
-    TimeoutStream(InnerStream&&);
+  TimeoutStream() {}
+  TimeoutStream(InnerStream &&);
 
-    TimeoutStream(const TimeoutStream&) = delete;
-    TimeoutStream& operator=(const TimeoutStream&) = delete;
+  TimeoutStream(const TimeoutStream &) = delete;
+  TimeoutStream &operator=(const TimeoutStream &) = delete;
 
-    TimeoutStream(TimeoutStream&&) = default;
-    TimeoutStream& operator=(TimeoutStream&&) = default;
+  TimeoutStream(TimeoutStream &&) = default;
+  TimeoutStream &operator=(TimeoutStream &&) = default;
 
-    executor_type get_executor()
-    {
-        return _state->inner.get_executor();
+  executor_type get_executor() { return _state->inner.get_executor(); }
+
+  template <class MutableBufferSequence, class Token>
+  auto async_read_some(const MutableBufferSequence &, Token &&);
+
+  template <class ConstBufferSequence, class Token>
+  auto async_write_some(const ConstBufferSequence &, Token &&);
+
+  template <class Token> auto async_connect(const endpoint_type &, Token &&);
+
+  // Set the timeout for all consecutive read operations.
+  void set_read_timeout(Duration d) { _max_read_duration = d; }
+
+  // Set the timeout for all consecutive read operations.
+  template <class DurationT>
+  void set_read_timeout(boost::optional<DurationT> d) {
+    if (d)
+      _max_read_duration = Duration(*d);
+    else
+      _max_read_duration = boost::none;
+  }
+
+  // Set the timeout for all consecutive write operations.
+  void set_write_timeout(Duration d) { _max_write_duration = d; }
+
+  // Set the timeout for all consecutive write operations.
+  template <class DurationT>
+  void set_write_timeout(boost::optional<DurationT> d) {
+    if (d)
+      _max_write_duration = Duration(*d);
+    else
+      _max_write_duration = boost::none;
+  }
+
+  // Set the timeout for all consecutive write operations.
+  void set_connect_timeout(Duration d) { _max_connect_duration = d; }
+
+  // Set the timeout for all consecutive write operations.
+  template <class DurationT>
+  void set_connect_timeout(boost::optional<DurationT> d) {
+    if (d)
+      _max_connect_duration = Duration(*d);
+    else
+      _max_connect_duration = boost::none;
+  }
+
+  void close(sys::error_code &ec) {
+    if (!_state)
+      return;
+
+    if (_state->inner.is_open()) {
+      _state->inner.close(ec);
     }
+  }
 
-    template<class MutableBufferSequence, class Token>
-    auto async_read_some(const MutableBufferSequence&, Token&&);
+  next_layer_type &next_layer() { return _state->inner; }
+  const next_layer_type &next_layer() const { return _state->inner; }
 
-    template<class ConstBufferSequence, class Token>
-    auto async_write_some(const ConstBufferSequence&, Token&&);
+  template <typename ShutdownType>
+  void shutdown(ShutdownType type, sys::error_code &ec) {
+    _state->inner.shutdown(type, ec);
+  }
 
-    template<class Token>
-    auto async_connect(const endpoint_type&, Token&&);
+  bool is_open() const {
+    if (!_state)
+      return false;
+    return _state->is_open();
+  }
 
-    // Set the timeout for all consecutive read operations.
-    void set_read_timeout(Duration d) {
-        _max_read_duration = d;
-    }
-
-    // Set the timeout for all consecutive read operations.
-    template<class DurationT>
-    void set_read_timeout(boost::optional<DurationT> d) {
-        if (d) _max_read_duration = Duration(*d);
-        else   _max_read_duration = boost::none;
-    }
-
-    // Set the timeout for all consecutive write operations.
-    void set_write_timeout(Duration d) {
-        _max_write_duration = d;
-    }
-
-    // Set the timeout for all consecutive write operations.
-    template<class DurationT>
-    void set_write_timeout(boost::optional<DurationT> d) {
-        if (d) _max_write_duration = Duration(*d);
-        else   _max_write_duration = boost::none;
-    }
-
-    // Set the timeout for all consecutive write operations.
-    void set_connect_timeout(Duration d) {
-        _max_connect_duration = d;
-    }
-
-    // Set the timeout for all consecutive write operations.
-    template<class DurationT>
-    void set_connect_timeout(boost::optional<DurationT> d) {
-        if (d) _max_connect_duration = Duration(*d);
-        else   _max_connect_duration = boost::none;
-    }
-
-    void close(sys::error_code& ec)
-    {
-        if (!_state) return;
-
-        if (_state->inner.is_open()) {
-            _state->inner.close(ec);
-        }
-    }
-
-          next_layer_type& next_layer()       { return _state->inner; }
-    const next_layer_type& next_layer() const { return _state->inner; }
-
-    template<typename ShutdownType>
-    void shutdown(ShutdownType type, sys::error_code& ec) {
-        _state->inner.shutdown(type, ec);
-    }
-
-    bool is_open() const {
-        if (!_state) return false;
-        return _state->is_open();
-    }
-
-    ~TimeoutStream();
+  ~TimeoutStream();
 
 private:
-
-    void setup_deadline( boost::optional<Duration>
-                       , Deadline&
-                       , std::function<void()>);
+  void setup_deadline(boost::optional<Duration>, Deadline &,
+                      std::function<void()>);
 
 private:
-    std::shared_ptr<State> _state;
-    boost::optional<Duration> _max_read_duration;
-    boost::optional<Duration> _max_write_duration;
-    boost::optional<Duration> _max_connect_duration;
+  std::shared_ptr<State> _state;
+  boost::optional<Duration> _max_read_duration;
+  boost::optional<Duration> _max_write_duration;
+  boost::optional<Duration> _max_connect_duration;
 };
 
-template<class InnerStream>
-inline
-TimeoutStream<InnerStream>::TimeoutStream(InnerStream&& inner_stream)
-    : _state(std::make_shared<State>(std::move(inner_stream)))
-{
-}
+template <class InnerStream>
+inline TimeoutStream<InnerStream>::TimeoutStream(InnerStream &&inner_stream)
+    : _state(std::make_shared<State>(std::move(inner_stream))) {}
 
-template<class InnerStream>
-template<class MutableBufferSequence, class Token>
-inline
-auto TimeoutStream<InnerStream>::async_read_some
-    ( const MutableBufferSequence& bs
-    , Token&& token)
-{
-    auto init = [&] (auto completion_handler) {
-        _state->read_handler = std::move(completion_handler);
+template <class InnerStream>
+template <class MutableBufferSequence, class Token>
+inline auto
+TimeoutStream<InnerStream>::async_read_some(const MutableBufferSequence &bs,
+                                            Token &&token) {
+  auto init = [&](auto completion_handler) {
+    _state->read_handler = std::move(completion_handler);
 
-        setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
-            auto h = std::move(s->read_handler);
-            s->inner.close();
-            h(asio::error::timed_out, 0);
-        });
-
-        _state->inner.async_read_some( bs
-                                     , [s = _state]
-                                       (const sys::error_code& ec, size_t size) {
-                                           s->read_deadline->stop();
-                                           if (s->read_handler) {
-                                               auto h = std::move(s->read_handler);
-                                               h(ec, size);
-                                           }
-                                       });
-    };
-
-    return boost::asio::async_initiate<
-        Token,
-        void(sys::error_code, size_t)
-    >(init, token);
-}
-
-template<class InnerStream>
-template<class ConstBufferSequence, class Token>
-inline
-auto TimeoutStream<InnerStream>::async_write_some( const ConstBufferSequence& bs
-                                                 , Token&& token)
-{
-    using Sig = void(const sys::error_code&, size_t);
-
-    boost::asio::async_completion<Token, Sig> init(token);
-
-    _state->write_handler = std::move(init.completion_handler);
-
-    setup_deadline(_max_write_duration, *_state->write_deadline, [s = _state] {
-        auto h = std::move(s->write_handler);
-        s->inner.close();
-        h(asio::error::timed_out, 0);
+    setup_deadline(_max_read_duration, *_state->read_deadline, [s = _state] {
+      auto h = std::move(s->read_handler);
+      s->inner.close();
+      h(asio::error::timed_out, 0);
     });
 
-    _state->inner.async_write_some( bs
-                                  , [s = _state]
-                                    (const sys::error_code& ec, size_t size) {
-                                        s->write_deadline->stop();
-                                        if (s->write_handler) {
-                                            auto h = std::move(s->write_handler);
-                                            h(ec, size);
-                                        }
-                                    });
+    _state->inner.async_read_some(
+        bs, [s = _state](const sys::error_code &ec, size_t size) {
+          s->read_deadline->stop();
+          if (s->read_handler) {
+            auto h = std::move(s->read_handler);
+            h(ec, size);
+          }
+        });
+  };
 
-    return init.result.get();
+  return boost::asio::async_initiate<Token, void(sys::error_code, size_t)>(
+      init, token);
 }
 
-template<class InnerStream>
-template<class Token>
-inline
-auto TimeoutStream<InnerStream>::async_connect
-    (const endpoint_type& ep, Token&& token)
-{
-    return boost::asio::async_initiate<
-        Token,
-        void(sys::error_code)
-    >([&] (auto completion_handler) {
+template <class InnerStream>
+template <class ConstBufferSequence, class Token>
+inline auto
+TimeoutStream<InnerStream>::async_write_some(const ConstBufferSequence &bs,
+                                             Token &&token) {
+  using Sig = void(const sys::error_code &, size_t);
+
+  boost::asio::async_completion<Token, Sig> init(token);
+
+  _state->write_handler = std::move(init.completion_handler);
+
+  setup_deadline(_max_write_duration, *_state->write_deadline, [s = _state] {
+    auto h = std::move(s->write_handler);
+    s->inner.close();
+    h(asio::error::timed_out, 0);
+  });
+
+  _state->inner.async_write_some(
+      bs, [s = _state](const sys::error_code &ec, size_t size) {
+        s->write_deadline->stop();
+        if (s->write_handler) {
+          auto h = std::move(s->write_handler);
+          h(ec, size);
+        }
+      });
+
+  return init.result.get();
+}
+
+template <class InnerStream>
+template <class Token>
+inline auto TimeoutStream<InnerStream>::async_connect(const endpoint_type &ep,
+                                                      Token &&token) {
+  return boost::asio::async_initiate<Token, void(sys::error_code)>(
+      [&](auto completion_handler) {
         _state->connect_handler = std::move(completion_handler);
 
-        setup_deadline(_max_connect_duration, *_state->connect_deadline, [s = _state] {
-            auto h = std::move(s->connect_handler);
-            s->inner.close();
-            h(asio::error::timed_out);
-        });
+        setup_deadline(_max_connect_duration, *_state->connect_deadline,
+                       [s = _state] {
+                         auto h = std::move(s->connect_handler);
+                         s->inner.close();
+                         h(asio::error::timed_out);
+                       });
 
-        _state->inner.async_connect( ep
-                                   , [s = _state]
-                                     (const sys::error_code& ec) {
-                                         s->connect_deadline->stop();
-                                         if (s->connect_handler) {
-                                             auto h = std::move(s->connect_handler);
-                                             h(ec);
-                                         }
-                                     });
-    }
-    , token);
+        _state->inner.async_connect(ep,
+                                    [s = _state](const sys::error_code &ec) {
+                                      s->connect_deadline->stop();
+                                      if (s->connect_handler) {
+                                        auto h = std::move(s->connect_handler);
+                                        h(ec);
+                                      }
+                                    });
+      },
+      token);
 }
 
-template<class InnerStream>
-void TimeoutStream<InnerStream>::setup_deadline( boost::optional<Duration> d
-                                               , Deadline& deadline
-                                               , std::function<void()> handler)
-{
-    if (!d) return;
-    deadline.start(*d, std::move(handler));
+template <class InnerStream>
+void TimeoutStream<InnerStream>::setup_deadline(boost::optional<Duration> d,
+                                                Deadline &deadline,
+                                                std::function<void()> handler) {
+  if (!d)
+    return;
+  deadline.start(*d, std::move(handler));
 }
 
-template<class InnerStream>
-inline TimeoutStream<InnerStream>::~TimeoutStream()
-{
-    sys::error_code ec;
-    close(ec);
+template <class InnerStream>
+inline TimeoutStream<InnerStream>::~TimeoutStream() {
+  sys::error_code ec;
+  close(ec);
 }
 
-} // namespace
+} // namespace ouinet

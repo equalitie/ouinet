@@ -17,37 +17,62 @@
 
 #include <fstream>
 
-#include "util/str.h"
 #include "api.h"
+#include "util/str.h"
 
 #include <boost/optional/optional.hpp>
 #include <boost/utility/string_view.hpp>
 
 class Logger;
 
-OUINET_COMMON_API Logger& get_logger();
+OUINET_COMMON_API Logger &get_logger();
 
 // Logger macros which should be used for efficiency
-// (also see <https://pzemtsov.github.io/2014/05/05/do-macro.html> for statement protection)
-#define OUI_LOG_SILLY(...) do { if (get_logger().get_threshold() <= SILLY) get_logger().silly(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_DEBUG(...) do { if (get_logger().get_threshold() <= DEBUG) get_logger().debug(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_VERBOSE(...) do { if (get_logger().get_threshold() <= VERBOSE) get_logger().verbose(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_INFO(...) do { if (get_logger().get_threshold() <= INFO) get_logger().info(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_WARN(...) do { if (get_logger().get_threshold() <= WARN) get_logger().warn(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_ERROR(...) do { if (get_logger().get_threshold() <= ERROR_LEVEL) get_logger().error(ouinet::util::str(__VA_ARGS__)); } while (false)
-#define OUI_LOG_ABORT(...) get_logger().abort(ouinet::util::str(__VA_ARGS__)) 
+// (also see <https://pzemtsov.github.io/2014/05/05/do-macro.html> for statement
+// protection)
+#define OUI_LOG_SILLY(...)                                                     \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= SILLY)                                 \
+      get_logger().silly(ouinet::util::str(__VA_ARGS__));                      \
+  } while (false)
+#define OUI_LOG_DEBUG(...)                                                     \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= DEBUG)                                 \
+      get_logger().debug(ouinet::util::str(__VA_ARGS__));                      \
+  } while (false)
+#define OUI_LOG_VERBOSE(...)                                                   \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= VERBOSE)                               \
+      get_logger().verbose(ouinet::util::str(__VA_ARGS__));                    \
+  } while (false)
+#define OUI_LOG_INFO(...)                                                      \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= INFO)                                  \
+      get_logger().info(ouinet::util::str(__VA_ARGS__));                       \
+  } while (false)
+#define OUI_LOG_WARN(...)                                                      \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= WARN)                                  \
+      get_logger().warn(ouinet::util::str(__VA_ARGS__));                       \
+  } while (false)
+#define OUI_LOG_ERROR(...)                                                     \
+  do {                                                                         \
+    if (get_logger().get_threshold() <= ERROR_LEVEL)                           \
+      get_logger().error(ouinet::util::str(__VA_ARGS__));                      \
+  } while (false)
+#define OUI_LOG_ABORT(...) get_logger().abort(ouinet::util::str(__VA_ARGS__))
 
 #ifndef LOG_DEBUG
-    // Would be nice if we could just use these, but some dependencies (notably i2pd)
-    // leak inclusion of `sys/syslog.h` which define it to their own values and
-    // we get redefinition warnings.
-    #define LOG_SILLY OUI_LOG_SILLY
-    #define LOG_DEBUG OUI_LOG_DEBUG
-    #define LOG_VERBOSE OUI_LOG_VERBOSE
-    #define LOG_INFO OUI_LOG_INFO
-    #define LOG_WARN OUI_LOG_WARN
-    #define LOG_ERROR OUI_LOG_ERROR
-    #define LOG_ABORT OUI_LOG_ABORT
+// Would be nice if we could just use these, but some dependencies (notably
+// i2pd) leak inclusion of `sys/syslog.h` which define it to their own values
+// and we get redefinition warnings.
+#define LOG_SILLY OUI_LOG_SILLY
+#define LOG_DEBUG OUI_LOG_DEBUG
+#define LOG_VERBOSE OUI_LOG_VERBOSE
+#define LOG_INFO OUI_LOG_INFO
+#define LOG_WARN OUI_LOG_WARN
+#define LOG_ERROR OUI_LOG_ERROR
+#define LOG_ABORT OUI_LOG_ABORT
 #endif
 
 // Standard log levels, ascending order of specificity.
@@ -55,73 +80,89 @@ enum log_level_t { SILLY, DEBUG, VERBOSE, INFO, WARN, ERROR_LEVEL, ABORT };
 
 OUINET_COMMON_API log_level_t default_log_level();
 
-inline std::ostream& operator<<(std::ostream& os, log_level_t ll) {
-    switch (ll) {
-        case SILLY:   return os << "SILLY";
-        case DEBUG:   return os << "DEBUG";
-        case VERBOSE: return os << "VERBOSE";
-        case INFO:    return os << "INFO";
-        case WARN:    return os << "WARN";
-        case ERROR_LEVEL:   return os << "ERROR";
-        case ABORT:   return os << "ABORT";
-    }
-    return os << "???";
+inline std::ostream &operator<<(std::ostream &os, log_level_t ll) {
+  switch (ll) {
+  case SILLY:
+    return os << "SILLY";
+  case DEBUG:
+    return os << "DEBUG";
+  case VERBOSE:
+    return os << "VERBOSE";
+  case INFO:
+    return os << "INFO";
+  case WARN:
+    return os << "WARN";
+  case ERROR_LEVEL:
+    return os << "ERROR";
+  case ABORT:
+    return os << "ABORT";
+  }
+  return os << "???";
 }
 
 // The input string should be in ALL CAPS for the parsing to succeed.
-inline boost::optional<log_level_t> log_level_from_string(const std::string& ll) {
-    if (ll == "SILLY") return SILLY;
-    if (ll == "DEBUG") return DEBUG;
-    if (ll == "VERBOSE") return VERBOSE;
-    if (ll == "INFO") return INFO;
-    if (ll == "WARN") return WARN;
-    if (ll == "ERROR") return ERROR_LEVEL;
-    if (ll == "ABORT") return ABORT;
-    return {};
+inline boost::optional<log_level_t>
+log_level_from_string(const std::string &ll) {
+  if (ll == "SILLY")
+    return SILLY;
+  if (ll == "DEBUG")
+    return DEBUG;
+  if (ll == "VERBOSE")
+    return VERBOSE;
+  if (ll == "INFO")
+    return INFO;
+  if (ll == "WARN")
+    return WARN;
+  if (ll == "ERROR")
+    return ERROR_LEVEL;
+  if (ll == "ABORT")
+    return ABORT;
+  return {};
 }
 
-class OUINET_COMMON_API Logger
-{
-  protected:
-    bool _stamp_with_time = false;
-    log_level_t threshold;
-    bool log_to_stderr;
-    std::string log_filename;
-    boost::optional<std::fstream> log_file;
+class OUINET_COMMON_API Logger {
+protected:
+  bool _stamp_with_time = false;
+  log_level_t threshold;
+  bool log_to_stderr;
+  std::string log_filename;
+  boost::optional<std::fstream> log_file;
 
-  public:
-    std::string state_to_text[0xFF]; // TOTAL_NO_OF_STATES
-    std::string message_type_to_text[0xFF]; // TOTAL_NO_OF_MESSAGE_TYPE];
+public:
+  std::string state_to_text[0xFF];        // TOTAL_NO_OF_STATES
+  std::string message_type_to_text[0xFF]; // TOTAL_NO_OF_MESSAGE_TYPE];
 
-    bool would_log(log_level_t) const;
+  bool would_log(log_level_t) const;
 
-    // Constructor sets an initial threshold
-    Logger(log_level_t threshold);
+  // Constructor sets an initial threshold
+  Logger(log_level_t threshold);
 
-    // Get the current log file name
-    std::string current_log_file() { return log_filename; }
-    std::fstream* get_log_file();
+  // Get the current log file name
+  std::string current_log_file() { return log_filename; }
+  std::fstream *get_log_file();
 
-    // Get the current threshold
-    log_level_t get_threshold() const { return threshold;}
-    void enable_timestamp() { _stamp_with_time = true;}
-    void disable_timestamp() { _stamp_with_time = false;}
-    
-    void log_to_file(std::string fname);
+  // Get the current threshold
+  log_level_t get_threshold() const { return threshold; }
+  void enable_timestamp() { _stamp_with_time = true; }
+  void disable_timestamp() { _stamp_with_time = false; }
 
-    void set_threshold(log_level_t level);
+  void log_to_file(std::string fname);
 
-    void log(log_level_t level, const std::string& msg, boost::string_view function_name = "");
+  void set_threshold(log_level_t level);
 
-    void silly  (const std::string& msg, boost::string_view function_name = "");
-    void debug  (const std::string& msg, boost::string_view function_name = "");
-    void verbose(const std::string& msg, boost::string_view function_name = "");
-    void info   (const std::string& msg, boost::string_view function_name = "");
-    void warn   (const std::string& msg, boost::string_view function_name = "");
-    void error  (const std::string& msg, boost::string_view function_name = "");
-    void abort  (const std::string& msg, boost::string_view function_name = "");
+  void log(log_level_t level, const std::string &msg,
+           boost::string_view function_name = "");
 
-    void assert_or_die(bool expr, std::string failure_message, std::string function_name = "");
+  void silly(const std::string &msg, boost::string_view function_name = "");
+  void debug(const std::string &msg, boost::string_view function_name = "");
+  void verbose(const std::string &msg, boost::string_view function_name = "");
+  void info(const std::string &msg, boost::string_view function_name = "");
+  void warn(const std::string &msg, boost::string_view function_name = "");
+  void error(const std::string &msg, boost::string_view function_name = "");
+  void abort(const std::string &msg, boost::string_view function_name = "");
+
+  void assert_or_die(bool expr, std::string failure_message,
+                     std::string function_name = "");
 };
 
 #endif // SRC_LOGGER_H_

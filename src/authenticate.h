@@ -1,101 +1,99 @@
 #pragma once
 
+#include "generic_stream.h"
+#include "http_util.h"
+#include "namespaces.h"
+#include "util.h"
 #include <boost/beast/core/detail/base64.hpp>
 #include <boost/beast/version.hpp>
 #include <openssl/crypto.h>
-#include "namespaces.h"
-#include "generic_stream.h"
-#include "http_util.h"
-#include "util.h"
 
 namespace ouinet {
 
 namespace authenticate_detail {
-    inline std::string parse_auth(beast::string_view encoded)
-    {
-        while(encoded.starts_with(" ")) encoded.remove_prefix(1);
-        while(encoded.ends_with(" "))   encoded.remove_suffix(1);
+inline std::string parse_auth(beast::string_view encoded) {
+  while (encoded.starts_with(" "))
+    encoded.remove_prefix(1);
+  while (encoded.ends_with(" "))
+    encoded.remove_suffix(1);
 
-        if (encoded.starts_with("Basic")) {
-            encoded.remove_prefix(strlen("Basic"));
-        } else {
-            return {};
-        }
+  if (encoded.starts_with("Basic")) {
+    encoded.remove_prefix(strlen("Basic"));
+  } else {
+    return {};
+  }
 
-        while(encoded.starts_with(" ")) encoded.remove_prefix(1);
+  while (encoded.starts_with(" "))
+    encoded.remove_prefix(1);
 
-        std::string decoded = ouinet::util::base64_decode(encoded);
+  std::string decoded = ouinet::util::base64_decode(encoded);
 
-        // Trim the Unicode character U+00A3 (POUND SIGN) from the end if present.
-        if (const auto s = decoded.size() >= 2) {
-            if (decoded[s - 1] == char(0xa3) && decoded[s - 2] == char(0xc2)) {
-                decoded.resize(s - 2);
-            }
-        }
-
-        return decoded;
+  // Trim the Unicode character U+00A3 (POUND SIGN) from the end if present.
+  if (const auto s = decoded.size() >= 2) {
+    if (decoded[s - 1] == char(0xa3) && decoded[s - 2] == char(0xc2)) {
+      decoded.resize(s - 2);
     }
+  }
+
+  return decoded;
 }
+} // namespace authenticate_detail
 
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
 //
 // This times out if an authentication error message fails to be sent.
-template<class Request>
+template <class Request>
 [[nodiscard]]
-inline
-std::expected<void, sys::error_code>
-authenticate( Request& req
-            , GenericStream& con
-            , beast::string_view credentials /* e.g.: "test:123" */
-            , Async yield)
-{
-    using namespace authenticate_detail;
+inline std::expected<void, sys::error_code>
+authenticate(Request &req, GenericStream &con,
+             beast::string_view credentials /* e.g.: "test:123" */
+             ,
+             Async yield) {
+  using namespace authenticate_detail;
 
-    if (credentials.empty()) return {};
+  if (credentials.empty())
+    return {};
 
-    auto auth_i = req.find(http::field::proxy_authorization);
+  auto auth_i = req.find(http::field::proxy_authorization);
 
-    if (auth_i != req.end()) {
-        const std::string computed = parse_auth(auth_i->value());
-        const int invalid = computed.size() != credentials.size()
-                            ? 1
-                            : CRYPTO_memcmp(
-                                credentials.data(),
-                                computed.data(),
-                                credentials.size()
-                              ); // Constant time memory compare from
-                                 // OpenSSL to avoid timing attacks.
+  if (auth_i != req.end()) {
+    const std::string computed = parse_auth(auth_i->value());
+    const int invalid =
+        computed.size() != credentials.size()
+            ? 1
+            : CRYPTO_memcmp(
+                  credentials.data(), computed.data(),
+                  credentials.size()); // Constant time memory compare from
+                                       // OpenSSL to avoid timing attacks.
 
-        // Make sure we don't pass the credentials further.
-        req.erase(http::field::proxy_authorization);
+    // Make sure we don't pass the credentials further.
+    req.erase(http::field::proxy_authorization);
 
-        if (!invalid) return {};
-    }
+    if (!invalid)
+      return {};
+  }
 
-    http::response<http::string_body>
-        res{http::status::proxy_authentication_required,
-            req.version()};
+  http::response<http::string_body> res{
+      http::status::proxy_authentication_required, req.version()};
 
-    res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-    res.set( http::field::proxy_authenticate
-           , "Basic realm=\"Ouinet injector\"");
+  res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+  res.set(http::field::proxy_authenticate, "Basic realm=\"Ouinet injector\"");
 
-    res.prepare_payload();
+  res.prepare_payload();
 
-    sys::error_code ec = util::http_reply(con, res, yield);
-    if (ec) return std::unexpected(ec);
+  sys::error_code ec = util::http_reply(con, res, yield);
+  if (ec)
+    return std::unexpected(ec);
 
-    return std::unexpected(asio::error::connection_refused);
+  return std::unexpected(asio::error::connection_refused);
 }
 
-template<class Request>
-inline
-void authorize( Request& req
-              , beast::string_view credentials /* e.g.: "test:123" */)
-{
-    std::string c = ouinet::util::base64_encode(credentials);
+template <class Request>
+inline void authorize(Request &req,
+                      beast::string_view credentials /* e.g.: "test:123" */) {
+  std::string c = ouinet::util::base64_encode(credentials);
 
-    req.set(http::field::proxy_authorization, "Basic " + c);
+  req.set(http::field::proxy_authorization, "Basic " + c);
 }
 
-} // ouinet namespace
+} // namespace ouinet

@@ -1,20 +1,20 @@
 #include "logger.h"
 #include "util/wait_condition.h"
 #define BOOST_TEST_MODULE test_fetch
-#include <boost/test/unit_test.hpp>
-#include <boost/test/data/test_case.hpp>
 #include <boost/test/data/monomorphic.hpp>
+#include <boost/test/data/test_case.hpp>
+#include <boost/test/unit_test.hpp>
 
-#include "util/dht.h"
-#include "util/test_dir.h"
-#include "util/http_server.h"
-#include "util/http_client.h"
-#include "util/request_builder.h"
-#include "util/unwrap.h"
-#include "injector.h"
 #include "client.h"
-#include "util/random.h"
+#include "injector.h"
 #include "ssl/util.h"
+#include "util/dht.h"
+#include "util/http_client.h"
+#include "util/http_server.h"
+#include "util/random.h"
+#include "util/request_builder.h"
+#include "util/test_dir.h"
+#include "util/unwrap.h"
 
 namespace data = boost::unit_test::data;
 using namespace std;
@@ -24,520 +24,490 @@ using namespace std::chrono_literals;
 using namespace boost::asio::ip;
 using tcp = asio::ip::tcp;
 
-template<class Config>
-static Config make_config(const std::vector<std::string>& args) {
-    static constexpr auto c_str = [](const std::string& str) {
-        return str.c_str();
-    };
+template <class Config>
+static Config make_config(const std::vector<std::string> &args) {
+  static constexpr auto c_str = [](const std::string &str) {
+    return str.c_str();
+  };
 
-    std::vector<const char*> argv;
-    std::transform(args.begin(), args.end(), std::back_inserter(argv), c_str);
-    return Config(argv.size(), argv.data());
+  std::vector<const char *> argv;
+  std::transform(args.begin(), args.end(), std::back_inserter(argv), c_str);
+  return Config(argv.size(), argv.data());
 }
 
 using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
 
-Response fetch_through_client(const Client& client, Request req, Async yield) {
-    boost::beast::tcp_stream stream(client.get_executor());
+Response fetch_through_client(const Client &client, Request req, Async yield) {
+  boost::beast::tcp_stream stream(client.get_executor());
 
-    unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
-    unwrap(http::async_write(stream, req, yield));
+  unwrap(stream.async_connect(client.get_proxy_endpoint(), yield));
+  unwrap(http::async_write(stream, req, yield));
 
-    beast::flat_buffer b;
-    Response res;
+  beast::flat_buffer b;
+  Response res;
 
-    unwrap(http::async_read(stream, b, res, yield));
+  unwrap(http::async_read(stream, b, res, yield));
 
-    return res;
+  return res;
 }
 
 void check_exception(std::exception_ptr e) {
-    try {
-        if (e) {
-            std::rethrow_exception(e);
-        }
-    } catch (const std::exception& e) {
-        BOOST_FAIL("Test failed with exception: " << e.what());
-    } catch (...) {
-        BOOST_FAIL("Test failed with unknown exception");
+  try {
+    if (e) {
+      std::rethrow_exception(e);
     }
+  } catch (const std::exception &e) {
+    BOOST_FAIL("Test failed with exception: " << e.what());
+  } catch (...) {
+    BOOST_FAIL("Test failed with unknown exception");
+  }
 }
 
-template<class F>
-requires std::invocable<F, Async>
-void run(asio::io_context& ctx, F&& async_test) {
-    using namespace std::chrono;
+template <class F>
+  requires std::invocable<F, Async>
+void run(asio::io_context &ctx, F &&async_test) {
+  using namespace std::chrono;
 
-    std::optional<steady_clock::time_point> spawn_end;
+  std::optional<steady_clock::time_point> spawn_end;
 
-    asio::spawn(
-        ctx,
-        [&spawn_end, async_test = std::move(async_test)] (asio::yield_context yield) mutable {
-            async_test(Async(yield));
-            spawn_end = steady_clock::now();
-        },
-        check_exception
-    );
+  asio::spawn(
+      ctx,
+      [&spawn_end,
+       async_test = std::move(async_test)](asio::yield_context yield) mutable {
+        async_test(Async(yield));
+        spawn_end = steady_clock::now();
+      },
+      check_exception);
 
-    ctx.run();
+  ctx.run();
 
-    // Test that after the test ended, the `ctx.run()` function exited in a timely manner.
-    // If `!spawn_end` then the test threw an exception which already makes the test fail.
-    if (spawn_end) {
-        auto test_end = steady_clock::now();
-        auto elapsed_ms = duration_cast<milliseconds>(test_end - *spawn_end).count();
-        // TODO: Keep reducing the allowed timeout
-        BOOST_REQUIRE_LT(elapsed_ms, 5000);
-    }
+  // Test that after the test ended, the `ctx.run()` function exited in a timely
+  // manner. If `!spawn_end` then the test threw an exception which already
+  // makes the test fail.
+  if (spawn_end) {
+    auto test_end = steady_clock::now();
+    auto elapsed_ms =
+        duration_cast<milliseconds>(test_end - *spawn_end).count();
+    // TODO: Keep reducing the allowed timeout
+    BOOST_REQUIRE_LT(elapsed_ms, 5000);
+  }
 }
 
 std::string generate_random_body() {
-    size_t min_size = 64;
-    size_t max_size = 2 * 1024 * 1024;
-    auto size = util::random::number<size_t>(min_size, max_size);
-    return util::random::printable_ascii(size);
+  size_t min_size = 64;
+  size_t max_size = 2 * 1024 * 1024;
+  auto size = util::random::number<size_t>(min_size, max_size);
+  return util::random::printable_ascii(size);
 }
 
 BOOST_AUTO_TEST_CASE(server) {
-    asio::io_context ctx;
-    run(ctx, [] (Async yield) {
-        TestDir root;
-        auto server = HttpServer(yield.get_executor(), root.path());
+  asio::io_context ctx;
+  run(ctx, [](Async yield) {
+    TestDir root;
+    auto server = HttpServer(yield.get_executor(), root.path());
 
-        std::string body = generate_random_body();
-        auto url = server.add_resource("/", body);
+    std::string body = generate_random_body();
+    auto url = server.add_resource("/", body);
 
-        auto ssl_ctx = server.ssl_context_for_client();
+    auto ssl_ctx = server.ssl_context_for_client();
 
-        auto rs = unwrap(fetch_from_origin(url, ssl_ctx, yield));
+    auto rs = unwrap(fetch_from_origin(url, ssl_ctx, yield));
 
-        BOOST_CHECK_EQUAL(rs.body(), body);
-    });
+    BOOST_CHECK_EQUAL(rs.body(), body);
+  });
 }
 
 BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
-    asio::io_context ctx;
+  asio::io_context ctx;
 
+  TestDir root;
+
+  const std::string injector_credentials = "username:password";
+
+  HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+  Client client(ctx, make_config<ClientConfig>({
+                         "./no_client_exec"s,
+                         "--log-level=DEBUG"s,
+                         "--repo"s,
+                         root.make_subdir("client").string(),
+                         // Bind to random ports to avoid clashes
+                         "--listen-on-tcp=127.0.0.1:0"s,
+                         "--front-end-ep=127.0.0.1:0"s,
+                         "--tls-ca-cert-store-file="s +
+                             server.certificate_path().string(),
+                         "--bt-bootstrap-no-default",
+                         "--trace-root=client",
+                     }));
+
+  // Clients are started explicitly
+  client.start();
+
+  run(ctx, [&, server = std::move(server)](Async yield) mutable {
+    auto body = generate_random_body();
+    auto url = server.add_resource("/", body);
+
+    auto rq = CacheRequestBuilder(url).build();
+
+    // The "seeder" fetches the signed content through the "injector"
+    auto rs1 = fetch_through_client(client, rq, yield);
+
+    BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
+    BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr],
+                        http_::response_source_hdr_origin);
+    BOOST_REQUIRE(rs1.body() == body);
+
+    client.stop();
+  });
+}
+
+BOOST_DATA_TEST_CASE(test_client_fetch_from_injector,
+                     data::make({"tcp"s, "utp"s}), proto) {
+  asio::io_context ctx;
+  run(ctx, [&ctx, &proto](Async yield) {
     TestDir root;
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    const std::string injector_credentials = "username:password";
+
+    Injector injector(
+        make_config<InjectorConfig>({
+            "./no_injector_exec"s,
+            "--log-level=DEBUG",
+            "--repo"s,
+            root.make_subdir("injector").string(),
+            "--credentials"s,
+            injector_credentials,
+            "--listen-on-" + proto +
+                "=0.0.0.0:7070"s, // TODO: bind to random port
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+            "--trace-root=injector"s,
+            "--allow-private-targets"s,
+        }),
+        ctx);
+
+    Client client(ctx, make_config<ClientConfig>({
+                           "./no_client_exec"s,
+                           "--log-level=DEBUG"s,
+                           "--repo"s,
+                           root.make_subdir("client"s).string(),
+                           "--injector-credentials"s,
+                           injector_credentials,
+                           "--cache-type=bep5-http"s,
+                           "--cache-http-public-key"s,
+                           injector.cache_http_public_key(),
+                           "--disable-origin-access"s,
+                           "--injector-ep=" + proto + ":127.0.0.1:7070"s,
+                           // Bind to random ports to avoid clashes
+                           "--listen-on-tcp=127.0.0.1:0"s,
+                           "--front-end-ep=127.0.0.1:0"s,
+                           "--trace-root=client"s,
+                           "--allow-private-targets"s,
+                       }));
+    client.start();
+
+    auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
+    auto body = generate_random_body();
+    for (uint16_t i = 0; i < 4; ++i) {
+      BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
+      auto url = server.add_resource("/", body);
+      auto rq = CacheRequestBuilder(url).set_route(rpi).build();
+      auto rs = fetch_through_client(client, rq, yield);
+
+      BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+      BOOST_CHECK_EQUAL(rs[http_::response_source_hdr],
+                        http_::response_source_hdr_injector);
+      BOOST_CHECK(rs.body() == body);
+    }
+    client.stop();
+  });
+}
+
+// An integration test with three types of nodes: the 'injector', a number of
+// 'seeder' clients and a number of 'leecher' clients.
+//
+// * The 'seeder' clients fetch a resource through the injector and store it
+// locally.
+// * The 'leecher' clients then fetch the resource from the 'seeder's.
+//
+// The test has variants for mock DHT and real DHT as well as for different
+// number of seeders and leechers.
+BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
+                     data::make({DhtImpl::mock, DhtImpl::real}) *
+                         data::make({1, 2})    // TODO: use more seeders
+                         * data::make({1, 2}), // TODO: use more leechers
+                     dht_impl, seeder_count, leecher_count) {
+  get_logger().set_threshold(DEBUG);
+
+  LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count,
+           " leecher_count=", leecher_count);
+
+  asio::io_context ctx;
+
+  TestDir root;
+
+  HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+  auto url = server.add_resource("/", generate_random_body());
+
+  run(ctx, [&, server = std::move(server)](Async yield) {
+    auto [dht_nodes, dht_endpoint, mock_dht_swarms] =
+        setup_dht(dht_impl, 8, yield);
 
     const std::string injector_credentials = "username:password";
 
-    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+    Injector injector(
+        make_config<InjectorConfig>(
+            {"./no_injector_exec"s, "--log-level=DEBUG", "--repo"s,
+             root.make_subdir("injector").string(), "--credentials"s,
+             injector_credentials,
+             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+             "--allow-private-targets", "--bt-bootstrap-no-default",
+             "--bt-bootstrap-extra", util::str(dht_endpoint),
+             "--bt-allow-martians", "--trace-root=injector"}),
+        ctx, mock_dht("injector", yield.get_executor(), mock_dht_swarms));
 
-    Client client(ctx, make_config<ClientConfig>({
-            "./no_client_exec"s,
-            "--log-level=DEBUG"s,
-            "--repo"s, root.make_subdir("client").string(),
-            // Bind to random ports to avoid clashes
-            "--listen-on-tcp=127.0.0.1:0"s,
-            "--front-end-ep=127.0.0.1:0"s,
-            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-            "--bt-bootstrap-no-default",
-            "--trace-root=client",
-        }));
+    std::vector<Client> seeders;
+    for (int i = 0; i < seeder_count; ++i) {
+      auto name = util::str("seeder-", i);
+
+      seeders.emplace_back(
+          ctx,
+          make_config<ClientConfig>(
+              {"./no_client_exec"s, "--log-level=DEBUG"s, "--repo"s,
+               root.make_subdir(name).string(), "--injector-credentials"s,
+               injector_credentials, "--cache-type=bep5-http"s,
+               "--cache-http-public-key"s, injector.cache_http_public_key(),
+               "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+               "--disable-origin-access"s,
+               // Bind to random ports to avoid clashes
+               "--listen-on-tcp=127.0.0.1:0"s, "--front-end-ep=127.0.0.1:0"s,
+               "--allow-private-targets", "--bt-bootstrap-no-default",
+               "--bt-bootstrap-extra", util::str(dht_endpoint),
+               "--bt-allow-martians", "--trace-root", name}),
+          mock_dht_builder(name, yield.get_executor(), mock_dht_swarms));
+    }
+
+    std::vector<Client> leechers;
+    for (int i = 0; i < leecher_count; ++i) {
+      auto name = util::str("leecher-", i);
+
+      leechers.emplace_back(
+          ctx,
+          make_config<ClientConfig>(
+              {"./no_client_exec"s, "--log-level=DEBUG"s, "--repo"s,
+               root.make_subdir(name).string(), "--injector-credentials"s,
+               injector_credentials, "--cache-type=bep5-http"s,
+               "--cache-http-public-key"s, injector.cache_http_public_key(),
+               "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+               "--disable-origin-access"s, "--disable-injector-access"s,
+               // Bind to random ports to avoid clashes
+               "--listen-on-tcp=127.0.0.1:0"s, "--front-end-ep=127.0.0.1:0"s,
+               "--allow-private-targets", "--bt-bootstrap-no-default",
+               "--bt-bootstrap-extra", util::str(dht_endpoint),
+               "--bt-allow-martians", "--trace-root"s, name}),
+          mock_dht_builder(name, yield.get_executor(), mock_dht_swarms));
+    }
 
     // Clients are started explicitly
-    client.start();
+    for (auto &client : seeders) {
+      client.start();
+    }
 
-    run(ctx, [&, server = std::move(server)] (Async yield) mutable {
-        auto body = generate_random_body();
-        auto url = server.add_resource("/", body);
+    for (auto &client : leechers) {
+      client.start();
+    }
 
-        auto rq = CacheRequestBuilder(url).build();
+    auto ssl_ctx = server.ssl_context_for_client();
+    auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
-        // The "seeder" fetches the signed content through the "injector"
-        auto rs1 = fetch_through_client(client, rq, yield);
+    auto rq = CacheRequestBuilder(url).build();
 
-        BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
-        BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr], http_::response_source_hdr_origin);
-        BOOST_REQUIRE(rs1.body() == body);
+    // "Seeders" fetch the signed content through the "injector"
+    WaitCondition fetch_from_injector_wc(yield.get_executor());
 
-        client.stop();
-    });
-}
+    for (auto &seeder : seeders) {
+      yield.spawn([&, lock = fetch_from_injector_wc.lock()](Async yield) {
+        auto rs = fetch_through_client(seeder, rq, yield);
 
-BOOST_DATA_TEST_CASE(
-    test_client_fetch_from_injector,
-    data::make({"tcp"s, "utp"s}),
-    proto
-){
-    asio::io_context ctx;
-    run(ctx, [&ctx, &proto] (Async yield){
-        TestDir root;
-        HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-        const std::string injector_credentials = "username:password";
+        BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+        BOOST_CHECK_EQUAL(rs[http_::response_source_hdr],
+                          http_::response_source_hdr_injector);
+        BOOST_CHECK_EQUAL(rs.body(), control_body);
+      });
+    }
 
-        Injector injector(
-            make_config<InjectorConfig>({
-                "./no_injector_exec"s,
-                "--log-level=DEBUG",
-                "--repo"s, root.make_subdir("injector").string(),
-                "--credentials"s, injector_credentials,
-                "--listen-on-" + proto + "=0.0.0.0:7070"s, // TODO: bind to random port
-                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-                "--trace-root=injector"s,
-                "--allow-private-targets"s,
-            }),
-            ctx
-        );
+    fetch_from_injector_wc.wait(yield).value();
 
-        Client client(ctx, make_config<ClientConfig>({
-            "./no_client_exec"s,
-            "--log-level=DEBUG"s,
-            "--repo"s, root.make_subdir("client"s).string(),
-            "--injector-credentials"s, injector_credentials,
-            "--cache-type=bep5-http"s,
-            "--cache-http-public-key"s, injector.cache_http_public_key(),
-            "--disable-origin-access"s,
-            "--injector-ep=" + proto + ":127.0.0.1:7070"s,
-            // Bind to random ports to avoid clashes
-            "--listen-on-tcp=127.0.0.1:0"s,
-            "--front-end-ep=127.0.0.1:0"s,
-            "--trace-root=client"s,
-            "--allow-private-targets"s,
-        }));
-        client.start();
+    // "Leechers" fetch the signed content from the "seeders"
+    WaitCondition fetch_from_seeders_wc(yield.get_executor());
 
-        auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
-        auto body = generate_random_body();
-        for (uint16_t i = 0; i < 4; ++i)
-        {
-            BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
-            auto url = server.add_resource("/", body);
-            auto rq = CacheRequestBuilder(url).set_route(rpi).build();
-            auto rs = fetch_through_client(client, rq, yield);
+    for (auto &leecher : leechers) {
+      yield.spawn([&, lock = fetch_from_seeders_wc.lock()](Async yield) {
+        auto rs = fetch_through_client(leecher, rq, yield);
 
-            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-            BOOST_CHECK(rs.body() == body);
-        }
-        client.stop();
-    });
-}
+        BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
+        BOOST_CHECK_EQUAL(rs[http_::response_source_hdr],
+                          http_::response_source_hdr_dist_cache);
+        BOOST_CHECK_EQUAL(rs.body(), control_body);
+      });
+    }
 
-// An integration test with three types of nodes: the 'injector', a number of 'seeder' clients
-// and a number of 'leecher' clients.
-//
-// * The 'seeder' clients fetch a resource through the injector and store it locally.
-// * The 'leecher' clients then fetch the resource from the 'seeder's.
-//
-// The test has variants for mock DHT and real DHT as well as for different number of seeders and
-// leechers.
-BOOST_DATA_TEST_CASE(
-    test_storing_into_and_fetching_from_the_cache,
-    data::make({ DhtImpl::mock, DhtImpl::real })
-        * data::make({ 1, 2 })  // TODO: use more seeders
-        * data::make({ 1, 2 }), // TODO: use more leechers
-    dht_impl,
-    seeder_count,
-    leecher_count
-) {
-    get_logger().set_threshold(DEBUG);
+    fetch_from_seeders_wc.wait(yield).value();
 
-    LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count, " leecher_count=", leecher_count);
+    injector.stop();
 
-    asio::io_context ctx;
+    for (auto &client : seeders) {
+      client.stop();
+    }
 
-    TestDir root;
-
-    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    auto url = server.add_resource("/", generate_random_body());
-
-    run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
-
-        const std::string injector_credentials = "username:password";
-
-    	Injector injector(
-    	    make_config<InjectorConfig>({
-                "./no_injector_exec"s,
-                "--log-level=DEBUG",
-                "--repo"s, root.make_subdir("injector").string(),
-                "--credentials"s, injector_credentials,
-                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-                "--allow-private-targets",
-                "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians",
-                "--trace-root=injector"
-            }),
-            ctx,
-            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
-        );
-
-        std::vector<Client> seeders;
-        for (int i = 0; i < seeder_count; ++i) {
-            auto name = util::str("seeder-", i);
-
-            seeders.emplace_back(
-                ctx,
-                make_config<ClientConfig>({
-                    "./no_client_exec"s,
-                    "--log-level=DEBUG"s,
-                    "--repo"s, root.make_subdir(name).string(),
-                    "--injector-credentials"s, injector_credentials,
-                    "--cache-type=bep5-http"s,
-                    "--cache-http-public-key"s, injector.cache_http_public_key(),
-                    "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                    "--disable-origin-access"s,
-                    // Bind to random ports to avoid clashes
-                    "--listen-on-tcp=127.0.0.1:0"s,
-                    "--front-end-ep=127.0.0.1:0"s,
-                    "--allow-private-targets",
-                    "--bt-bootstrap-no-default",
-                    "--bt-bootstrap-extra", util::str(dht_endpoint),
-                    "--bt-allow-martians",
-                    "--trace-root", name
-                }),
-                mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
-            );
-        }
-
-        std::vector<Client> leechers;
-        for (int i = 0; i < leecher_count; ++i) {
-            auto name = util::str("leecher-", i);
-
-            leechers.emplace_back(
-                ctx,
-                make_config<ClientConfig>({
-                    "./no_client_exec"s,
-                    "--log-level=DEBUG"s,
-                    "--repo"s, root.make_subdir(name).string(),
-                    "--injector-credentials"s, injector_credentials,
-                    "--cache-type=bep5-http"s,
-                    "--cache-http-public-key"s, injector.cache_http_public_key(),
-                    "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                    "--disable-origin-access"s,
-                    "--disable-injector-access"s,
-                    // Bind to random ports to avoid clashes
-                    "--listen-on-tcp=127.0.0.1:0"s,
-                    "--front-end-ep=127.0.0.1:0"s,
-                    "--allow-private-targets",
-                    "--bt-bootstrap-no-default",
-                    "--bt-bootstrap-extra", util::str(dht_endpoint),
-                    "--bt-allow-martians",
-                    "--trace-root"s, name
-                }),
-                mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
-            );
-        }
-
-        // Clients are started explicitly
-        for (auto& client : seeders) {
-            client.start();
-        }
-
-        for (auto& client : leechers) {
-            client.start();
-        }
-
-        auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
-
-        auto rq = CacheRequestBuilder(url).build();
-
-        // "Seeders" fetch the signed content through the "injector"
-        WaitCondition fetch_from_injector_wc(yield.get_executor());
-
-        for (auto& seeder : seeders) {
-            yield.spawn([&, lock = fetch_from_injector_wc.lock()] (Async yield) {
-                auto rs = fetch_through_client(seeder, rq, yield);
-
-                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-                BOOST_CHECK_EQUAL(rs.body(), control_body);
-            });
-        }
-
-        fetch_from_injector_wc.wait(yield).value();
-
-        // "Leechers" fetch the signed content from the "seeders"
-        WaitCondition fetch_from_seeders_wc(yield.get_executor());
-
-        for (auto& leecher : leechers) {
-            yield.spawn([&, lock = fetch_from_seeders_wc.lock()] (Async yield) {
-                auto rs = fetch_through_client(leecher, rq, yield);
-
-                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-                BOOST_CHECK_EQUAL(rs.body(), control_body);
-            });
-        }
-
-        fetch_from_seeders_wc.wait(yield).value();
-
-        injector.stop();
-
-        for (auto& client: seeders) {
-            client.stop();
-        }
-
-        for (auto& client: leechers) {
-            client.stop();
-        }
-    });
+    for (auto &client : leechers) {
+      client.stop();
+    }
+  });
 }
 
 // Test fetching without the Ouinet client involved. That is, start the injector
 // and fetch through it a resource from an origin. Do it sequentially 30 times.
 // TODO: Connect to injector using uTP/TLS
 BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
-    asio::io_context ctx;
+  asio::io_context ctx;
 
-    TestDir root;
+  TestDir root;
 
-    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    auto url = server.add_resource("/", generate_random_body());
+  HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+  auto url = server.add_resource("/", generate_random_body());
 
-    tcp::endpoint injector_ep{
-        asio::ip::address_v4::loopback(),
-        4567
-    };
+  tcp::endpoint injector_ep{asio::ip::address_v4::loopback(), 4567};
 
-    Injector injector(make_config<InjectorConfig>({
-            "./no_injector_exec"s,
-            "--repo"s, root.make_subdir("injector").string(),
-            // TODO: Listen on a random port
-            "--listen-on-tcp"s, util::str(injector_ep),
-            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-            "--allow-private-targets",
-            "--bt-bootstrap-no-default",
-            "--trace-root=injector"
-        }),
-        ctx);
+  Injector injector(
+      make_config<InjectorConfig>(
+          {"./no_injector_exec"s, "--repo"s,
+           root.make_subdir("injector").string(),
+           // TODO: Listen on a random port
+           "--listen-on-tcp"s, util::str(injector_ep),
+           "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+           "--allow-private-targets", "--bt-bootstrap-no-default",
+           "--trace-root=injector"}),
+      ctx);
 
-    run(ctx, [&, server = std::move(server)] (Async yield) {
-        auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
+  run(ctx, [&, server = std::move(server)](Async yield) {
+    auto ssl_ctx = server.ssl_context_for_client();
+    auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
-        auto rq = build_private_request(url);
+    auto rq = build_private_request(url);
 
-        for (uint16_t i = 0; i < 30; ++i) {
-            // Connect to injector and establish HTTP CONNECT tunnel
-            tcp::socket socket(yield.get_executor());
+    for (uint16_t i = 0; i < 30; ++i) {
+      // Connect to injector and establish HTTP CONNECT tunnel
+      tcp::socket socket(yield.get_executor());
 
-            socket.async_connect(injector_ep, yield);
+      socket.async_connect(injector_ep, yield);
 
-            auto connect_rq = Request{
-                http::verb::connect
-                , url.host + ":" + (url.port.empty() ? "443" : url.port)
-                , 11 /* HTTP/1.1 */
-            };
-            connect_rq.set(http::field::host, connect_rq.target());
+      auto connect_rq = Request{
+          http::verb::connect,
+          url.host + ":" + (url.port.empty() ? "443" : url.port),
+          11 /* HTTP/1.1 */
+      };
+      connect_rq.set(http::field::host, connect_rq.target());
 
-            http::async_write(socket, connect_rq, yield);
+      http::async_write(socket, connect_rq, yield);
 
-            Response connect_rs;
+      Response connect_rs;
 
-            beast::flat_buffer buf;
-            http::async_read(socket, buf, connect_rs, yield);
+      beast::flat_buffer buf;
+      http::async_read(socket, buf, connect_rs, yield);
 
-            BOOST_REQUIRE_EQUAL(connect_rs.result(), http::status::ok);
-            BOOST_REQUIRE_EQUAL(buf.size(), 0);
+      BOOST_REQUIRE_EQUAL(connect_rs.result(), http::status::ok);
+      BOOST_REQUIRE_EQUAL(buf.size(), 0);
 
-            // Do TLS handshake with the origin over the established tunnel
-            auto stream = setup_tls_stream(std::move(socket), ssl_ctx, url.host);
-            stream.async_handshake(asio::ssl::stream_base::client, yield);
+      // Do TLS handshake with the origin over the established tunnel
+      auto stream = setup_tls_stream(std::move(socket), ssl_ctx, url.host);
+      stream.async_handshake(asio::ssl::stream_base::client, yield);
 
-            // Send and receive through the secure tunnel
-            http::async_write(stream, rq, yield);
+      // Send and receive through the secure tunnel
+      http::async_write(stream, rq, yield);
 
-            Response rs;
-            http::async_read(stream, buf, rs, yield);
+      Response rs;
+      http::async_read(stream, buf, rs, yield);
 
-            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
-            BOOST_REQUIRE_EQUAL(rs.body(), control_body);
-        }
+      BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+      BOOST_REQUIRE_EQUAL(rs.body(), control_body);
+    }
 
-        injector.stop();
-    });
+    injector.stop();
+  });
 }
 
-BOOST_DATA_TEST_CASE(
-    test_fetching_private_route_30_times,
-    data::make({ DhtImpl::mock, DhtImpl::real }),
-    dht_impl
-) {
-    asio::io_context ctx;
+BOOST_DATA_TEST_CASE(test_fetching_private_route_30_times,
+                     data::make({DhtImpl::mock, DhtImpl::real}), dht_impl) {
+  asio::io_context ctx;
 
-    TestDir root;
+  TestDir root;
 
-    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    auto url = server.add_resource("/", generate_random_body());
+  HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+  auto url = server.add_resource("/", generate_random_body());
 
-    run(ctx, [&, server = std::move(server)] (Async yield) {
-        // NOTE: there is probably a bug somewhere which cause injector announcements to sometimes
-        // have no effect even though the announce call completes successfully from the injector's
-        // point of view. The subsequent lookups by the client don't find anything and the request
-        // timeouts.
-        //
-        // Increasing the number of DHT nodes seems to help (probably because it increases the
-        // chance that at least some of the nodes handle the announcement) but it's just a quic and
-        // dirty workaround. We should ideally fix the bug, but we are also planning to replace the
-        // DHT implementation with the one from Ouisync so the effort is better spent there.
-        auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
+  run(ctx, [&, server = std::move(server)](Async yield) {
+    // NOTE: there is probably a bug somewhere which cause injector
+    // announcements to sometimes have no effect even though the announce call
+    // completes successfully from the injector's point of view. The subsequent
+    // lookups by the client don't find anything and the request timeouts.
+    //
+    // Increasing the number of DHT nodes seems to help (probably because it
+    // increases the chance that at least some of the nodes handle the
+    // announcement) but it's just a quic and dirty workaround. We should
+    // ideally fix the bug, but we are also planning to replace the DHT
+    // implementation with the one from Ouisync so the effort is better spent
+    // there.
+    auto [dht_nodes, dht_endpoint, mock_dht_swarms] =
+        setup_dht(dht_impl, 8, yield);
 
-        const std::string injector_credentials = "username:password";
+    const std::string injector_credentials = "username:password";
 
-    	Injector injector(
-	        make_config<InjectorConfig>({
-                "./no_injector_exec"s,
-                "--log-level=DEBUG",
-                "--repo"s, root.make_subdir("injector").string(),
-                "--credentials"s, injector_credentials,
-                "--allow-private-targets",
-                "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians",
-                "--trace-root=injector"
-            }),
-            ctx,
-            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
-        );
+    Injector injector(
+        make_config<InjectorConfig>(
+            {"./no_injector_exec"s, "--log-level=DEBUG", "--repo"s,
+             root.make_subdir("injector").string(), "--credentials"s,
+             injector_credentials, "--allow-private-targets",
+             "--bt-bootstrap-no-default", "--bt-bootstrap-extra",
+             util::str(dht_endpoint), "--bt-allow-martians",
+             "--trace-root=injector"}),
+        ctx, mock_dht("injector", yield.get_executor(), mock_dht_swarms));
 
-        Client client(
-            ctx,
-            make_config<ClientConfig>({
-                "./no_client_exec"s,
-                "--log-level=DEBUG"s,
-                "--repo"s, root.make_subdir("client").string(),
-                "--injector-credentials"s, injector_credentials,
-                "--cache-type=bep5-http"s,
-                "--cache-http-public-key"s, injector.cache_http_public_key(),
-                "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
-                "--disable-origin-access"s,
-                // Bind to random ports to avoid clashes
-                "--listen-on-tcp=127.0.0.1:0"s,
-                "--front-end-ep=127.0.0.1:0"s,
-                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
-                "--allow-private-targets",
-                "--bt-bootstrap-no-default",
-                "--bt-bootstrap-extra", util::str(dht_endpoint),
-                "--bt-allow-martians",
-                "--trace-root=client"
-            }),
-            mock_dht_builder("client", yield.get_executor(), mock_dht_swarms)
-        );
+    Client client(
+        ctx,
+        make_config<ClientConfig>(
+            {"./no_client_exec"s, "--log-level=DEBUG"s, "--repo"s,
+             root.make_subdir("client").string(), "--injector-credentials"s,
+             injector_credentials, "--cache-type=bep5-http"s,
+             "--cache-http-public-key"s, injector.cache_http_public_key(),
+             "--injector-tls-cert-file"s, injector.tls_cert_file().string(),
+             "--disable-origin-access"s,
+             // Bind to random ports to avoid clashes
+             "--listen-on-tcp=127.0.0.1:0"s, "--front-end-ep=127.0.0.1:0"s,
+             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+             "--allow-private-targets", "--bt-bootstrap-no-default",
+             "--bt-bootstrap-extra", util::str(dht_endpoint),
+             "--bt-allow-martians", "--trace-root=client"}),
+        mock_dht_builder("client", yield.get_executor(), mock_dht_swarms));
 
+    // Clients are started explicitly
+    client.start();
 
-        // Clients are started explicitly
-        client.start();
+    auto ssl_ctx = server.ssl_context_for_client();
+    auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
-        auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
+    auto rq = build_private_request(url);
 
-        auto rq = build_private_request(url);
+    for (uint16_t i = 0; i < 30; ++i) {
+      auto rs = fetch_through_client(client, rq, yield);
 
-        for (uint16_t i = 0; i < 30; ++i) {
-            auto rs = fetch_through_client(client, rq, yield);
+      BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+      BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr],
+                          http_::response_source_hdr_proxy);
+      BOOST_REQUIRE_EQUAL(rs.body(), control_body);
+    }
 
-            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
-            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
-            BOOST_REQUIRE_EQUAL(rs.body(), control_body);
-        }
-
-        injector.stop();
-        client.stop();
-    });
+    injector.stop();
+    client.stop();
+  });
 }

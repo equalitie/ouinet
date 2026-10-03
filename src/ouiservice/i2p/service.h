@@ -1,15 +1,15 @@
 #pragma once
 
-#include "namespaces.h"
 #include "api.h"
+#include "namespaces.h"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/filesystem/path.hpp>
 
+#include <expected>
 #include <memory>
 #include <variant>
-#include <expected>
 
 namespace ouinet {
 
@@ -38,76 +38,71 @@ class Trace;
 
 class OUINET_I2P_API I2pService {
 public:
-    struct ConfigExternal {
-        asio::ip::tcp::endpoint endpoint;
+  struct ConfigExternal {
+    asio::ip::tcp::endpoint endpoint;
+  };
+
+  struct ConfigI2pdExe {
+    fs::path i2pd_exe_path;
+    fs::path datadir;
+  };
+
+  struct ConfigI2pdLib {
+    fs::path datadir;
+  };
+
+  struct Config {
+    std::optional<ConfigExternal> ext;
+    std::optional<ConfigI2pdExe> i2pd_exe;
+    std::optional<ConfigI2pdLib> i2pd_lib;
+  };
+
+  struct State {
+    struct Starting {};
+    struct PerformingHealthCheck {};
+    struct Running {
+      asio::ip::tcp::endpoint sam_endpoint;
     };
+    struct Aborted {};
 
-    struct ConfigI2pdExe {
-        fs::path i2pd_exe_path;
-        fs::path datadir;
-    };
+    using Alternatives =
+        std::variant<Starting, PerformingHealthCheck, Running, Aborted>;
 
-    struct ConfigI2pdLib {
-        fs::path datadir;
-    };
+    template <class V>
+      requires(!std::is_same_v<V, State> &&
+               std::constructible_from<Alternatives, V>)
+    State(V &&v) : value(std::forward<V>(v)) {}
 
-    struct Config {
-        std::optional<ConfigExternal> ext;
-        std::optional<ConfigI2pdExe> i2pd_exe;
-        std::optional<ConfigI2pdLib> i2pd_lib;
-    };
+    Alternatives value;
 
-    struct State {
-        struct Starting {};
-        struct PerformingHealthCheck {};
-        struct Running {
-            asio::ip::tcp::endpoint sam_endpoint;
-        };
-        struct Aborted {};
+    template <class S> const S *as() const { return std::get_if<S>(&value); }
 
-        using Alternatives = std::variant<
-            Starting,
-            PerformingHealthCheck,
-            Running,
-            Aborted
-        >;
+    template <class S> bool is() const { return as<S>() != nullptr; }
+  };
 
-        template<class V>
-        requires(!std::is_same_v<V, State> && std::constructible_from<Alternatives, V>)
-        State(V&& v) : value(std::forward<V>(v)) {}
+  static I2pService start(Config, asio::any_io_executor, Cancel, Trace);
 
-        Alternatives value;
+  State get_state() const;
 
-        template<class S> const S* as() const {
-            return std::get_if<S>(&value);
-        }
+  // Returns `State::Running` when the state is `Running` and `none` if no
+  // more attempts to start the service will be made (the state is
+  // `Aborted`). Note that even if state is `Running` it can later change if
+  // the connection to the service is lost.
+  std::optional<State::Running> await_running_state(Async) const;
 
-        template<class S> bool is() const {
-            return as<S>() != nullptr;
-        }
-    };
+  // Create a session with newly generated destination keypair (thus unique I2P
+  // address).
+  std::expected<I2pSession, sys::error_code> create_session(Async);
 
-    static I2pService start(Config, asio::any_io_executor, Cancel, Trace);
-
-    State get_state() const;
-
-    // Returns `State::Running` when the state is `Running` and `none` if no
-    // more attempts to start the service will be made (the state is
-    // `Aborted`). Note that even if state is `Running` it can later change if
-    // the connection to the service is lost.
-    std::optional<State::Running> await_running_state(Async) const;
-
-    // Create a session with newly generated destination keypair (thus unique I2P address).
-    std::expected<I2pSession, sys::error_code> create_session(Async);
-
-    // Create a session with existing destionation keypair.
-    std::expected<I2pSession, sys::error_code> create_session(I2pDestinationKeypair, Async);
+  // Create a session with existing destionation keypair.
+  std::expected<I2pSession, sys::error_code>
+      create_session(I2pDestinationKeypair, Async);
 
 private:
-    struct Inner;
+  struct Inner;
 
-    I2pService(std::shared_ptr<Inner> inner) : _inner(std::move(inner)) {}
-    std::shared_ptr<Inner> _inner;
+  I2pService(std::shared_ptr<Inner> inner) : _inner(std::move(inner)) {}
+  std::shared_ptr<Inner> _inner;
 };
 
-} // namespace
+} // namespace ouinet

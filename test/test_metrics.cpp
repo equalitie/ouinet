@@ -1,13 +1,13 @@
 #define BOOST_TEST_MODULE utility
 #include <boost/test/unit_test.hpp>
 
-#include <boost/asio/spawn.hpp>
-#include <namespaces.h>
-#include <iostream>
-#include "task.h"
 #include "async_sleep.h"
 #include "cxx/metrics.h"
+#include "task.h"
 #include "util/test_dir.h"
+#include <boost/asio/spawn.hpp>
+#include <iostream>
+#include <namespaces.h>
 
 BOOST_AUTO_TEST_SUITE(ouinet_metrics)
 
@@ -23,105 +23,109 @@ string public_key_pem =
     "-----END PUBLIC KEY-----";
 
 BOOST_AUTO_TEST_CASE(enable_enable) {
-    TestDir test_dir;
+  TestDir test_dir;
 
-    asio::io_context ctx;
+  asio::io_context ctx;
 
-    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
+  task::spawn_detached(ctx, [&](asio::yield_context yield) {
+    auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
+    auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
-        Cancel cancel;
+    Cancel cancel;
 
-        async_sleep(300ms, cancel, yield);
-        client.enable(ctx.get_executor(), [](auto, auto, auto) {});
+    async_sleep(300ms, cancel, yield);
+    client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(300ms, cancel, yield);
-        client.enable(ctx.get_executor(), [](auto, auto, auto) {});
-    });
+    async_sleep(300ms, cancel, yield);
+    client.enable(ctx.get_executor(), [](auto, auto, auto) {});
+  });
 
-    ctx.run();
+  ctx.run();
 
-    // Disable warnings about not checking assertions, they are used in the Rust code.
-    BOOST_REQUIRE(true);
+  // Disable warnings about not checking assertions, they are used in the Rust
+  // code.
+  BOOST_REQUIRE(true);
 }
 
 BOOST_AUTO_TEST_CASE(disable_disable) {
-    TestDir test_dir;
+  TestDir test_dir;
 
-    asio::io_context ctx;
+  asio::io_context ctx;
 
-    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
+  task::spawn_detached(ctx, [&](asio::yield_context yield) {
+    auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
+    auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
-        Cancel cancel;
+    Cancel cancel;
 
-        async_sleep(300ms, cancel, yield);
-        client.disable();
+    async_sleep(300ms, cancel, yield);
+    client.disable();
 
-        async_sleep(300ms, cancel, yield);
-        client.disable();
-    });
+    async_sleep(300ms, cancel, yield);
+    client.disable();
+  });
 
-    ctx.run();
+  ctx.run();
 
-    // Disable warnings about not checking assertions, they are used in the Rust code.
-    BOOST_REQUIRE(true);
+  // Disable warnings about not checking assertions, they are used in the Rust
+  // code.
+  BOOST_REQUIRE(true);
 }
 
 BOOST_AUTO_TEST_CASE(enable_disable_enable) {
-    TestDir test_dir;
+  TestDir test_dir;
 
-    asio::io_context ctx;
+  asio::io_context ctx;
 
-    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
+  task::spawn_detached(ctx, [&](asio::yield_context yield) {
+    auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
+    auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
-        Cancel cancel;
+    Cancel cancel;
 
-        async_sleep(300ms, cancel, yield);
-        client.enable(ctx.get_executor(), [](auto, auto, auto) {});
+    async_sleep(300ms, cancel, yield);
+    client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(300ms, cancel, yield);
-        client.disable();
+    async_sleep(300ms, cancel, yield);
+    client.disable();
 
-        async_sleep(300ms, cancel, yield);
-        client.enable(ctx.get_executor(), [](auto, auto, auto) {});
-    });
+    async_sleep(300ms, cancel, yield);
+    client.enable(ctx.get_executor(), [](auto, auto, auto) {});
+  });
 
-    ctx.run();
+  ctx.run();
 
-    // Disable warnings about not checking assertions, they are used in the Rust code.
-    BOOST_REQUIRE(true);
+  // Disable warnings about not checking assertions, they are used in the Rust
+  // code.
+  BOOST_REQUIRE(true);
 }
 
 BOOST_AUTO_TEST_CASE(disable_enable_disable) {
-    TestDir test_dir;
+  TestDir test_dir;
 
-    asio::io_context ctx;
+  asio::io_context ctx;
 
-    task::spawn_detached(ctx, [&] (asio::yield_context yield) {
-        auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
-        auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
+  task::spawn_detached(ctx, [&](asio::yield_context yield) {
+    auto encryption_key = *metrics::EncryptionKey::validate(public_key_pem);
+    auto client = metrics::Client(test_dir.path(), std::move(encryption_key));
 
-        Cancel cancel;
+    Cancel cancel;
 
-        async_sleep(300ms, cancel, yield);
-        client.disable();
+    async_sleep(300ms, cancel, yield);
+    client.disable();
 
-        async_sleep(300ms, cancel, yield);
-        client.enable(ctx.get_executor(), [](auto, auto, auto) {});
+    async_sleep(300ms, cancel, yield);
+    client.enable(ctx.get_executor(), [](auto, auto, auto) {});
 
-        async_sleep(300ms, cancel, yield);
-        client.disable();
-    });
+    async_sleep(300ms, cancel, yield);
+    client.disable();
+  });
 
-    ctx.run();
+  ctx.run();
 
-    // Disable warnings about not checking assertions, they are used in the Rust code.
-    BOOST_REQUIRE(true);
+  // Disable warnings about not checking assertions, they are used in the Rust
+  // code.
+  BOOST_REQUIRE(true);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

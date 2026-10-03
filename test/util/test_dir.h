@@ -1,127 +1,116 @@
 #pragma once
 
+#include "namespaces.h"
+#include <boost/filesystem.hpp>
 #include <iostream>
 #include <optional>
-#include <boost/filesystem.hpp>
-#include "namespaces.h"
 
 namespace ouinet {
 
 class TestDir {
 public:
-    static fs::path tests_root() {
-        return fs::temp_directory_path() / "ouinet-cpp-tests";
+  static fs::path tests_root() {
+    return fs::temp_directory_path() / "ouinet-cpp-tests";
+  }
+
+  struct Builder {
+    bool _delete_if_exists = false;
+    bool _delete_on_exit = false;
+
+    Builder delete_if_exists(bool value) {
+      _delete_if_exists = value;
+      return *this;
     }
 
-    struct Builder {
-        bool _delete_if_exists = false;
-        bool _delete_on_exit = false;
+    Builder delete_on_exit(bool value) {
+      _delete_on_exit = value;
+      return *this;
+    }
 
-        Builder delete_if_exists(bool value) {
-            _delete_if_exists = value;
-            return *this;
-        }
-
-        Builder delete_on_exit(bool value) {
-            _delete_on_exit = value;
-            return *this;
-        }
-
-        TestDir build(fs::path path) const {
-            return TestDir(path, *this);
-        }
-    };
+    TestDir build(fs::path path) const { return TestDir(path, *this); }
+  };
 
 public:
 #ifdef BOOST_TEST_MODULE
-    TestDir()
-        : _tempdir(tests_root() / suite_name() / test_name() / fs::unique_path())
-    {
-        fs::create_directories(_tempdir);
-    }
+  TestDir()
+      : _tempdir(tests_root() / suite_name() / test_name() /
+                 fs::unique_path()) {
+    fs::create_directories(_tempdir);
+  }
 
-    static TestDir for_global_fixture() {
-        return TestDir(tests_root() / module_name() / fs::unique_path());
-    }
+  static TestDir for_global_fixture() {
+    return TestDir(tests_root() / module_name() / fs::unique_path());
+  }
 #endif
 
-    TestDir(fs::path path, std::optional<Builder> builder = {})
-        : _tempdir(std::move(path))
-    {
-        if (builder) {
-            if (builder->_delete_if_exists && fs::exists(_tempdir)) {
-                fs::remove_all(_tempdir);
-            }
-            _delete_on_exit = builder->_delete_on_exit;
-        }
-
-        fs::create_directories(_tempdir);
+  TestDir(fs::path path, std::optional<Builder> builder = {})
+      : _tempdir(std::move(path)) {
+    if (builder) {
+      if (builder->_delete_if_exists && fs::exists(_tempdir)) {
+        fs::remove_all(_tempdir);
+      }
+      _delete_on_exit = builder->_delete_on_exit;
     }
 
-    TestDir make_subdir(const std::string& name) const {
-        fs::path path = _tempdir / name;
-        fs::create_directory(path);
-        auto dir = TestDir(path);
-        return dir;
-    }
+    fs::create_directories(_tempdir);
+  }
 
-    const fs::path& path() const {
-        return _tempdir;
-    }
+  TestDir make_subdir(const std::string &name) const {
+    fs::path path = _tempdir / name;
+    fs::create_directory(path);
+    auto dir = TestDir(path);
+    return dir;
+  }
 
-    const std::string string() const {
-        return _tempdir.string();
-    }
+  const fs::path &path() const { return _tempdir; }
 
-    void delete_content() const {
-        auto begin = fs::directory_iterator(_tempdir);
-        auto end = fs::directory_iterator();
-        for (auto i = begin; i != end; ++i) {
-            try {
-                fs::remove_all(*i);
-            } catch (const std::exception& e) {
-                std::cout << "Failed to remove " << *i << ": " << e.what() << "\n";
-                throw;
-            }
-        }
-    }
+  const std::string string() const { return _tempdir.string(); }
 
-    ~TestDir() {
-        if (_delete_on_exit) {
-            fs::remove_all(_tempdir);
-        }
+  void delete_content() const {
+    auto begin = fs::directory_iterator(_tempdir);
+    auto end = fs::directory_iterator();
+    for (auto i = begin; i != end; ++i) {
+      try {
+        fs::remove_all(*i);
+      } catch (const std::exception &e) {
+        std::cout << "Failed to remove " << *i << ": " << e.what() << "\n";
+        throw;
+      }
     }
+  }
 
-    bool delete_on_exit() const {
-        return _delete_on_exit;
+  ~TestDir() {
+    if (_delete_on_exit) {
+      fs::remove_all(_tempdir);
     }
+  }
 
-    void delete_on_exit(bool value) {
-        _delete_on_exit = value;
-    }
+  bool delete_on_exit() const { return _delete_on_exit; }
+
+  void delete_on_exit(bool value) { _delete_on_exit = value; }
 
 private:
 #ifdef BOOST_TEST_MODULE
-    static auto const& current_test_case() {
-        return boost::unit_test::framework::current_test_case();
-    }
+  static auto const &current_test_case() {
+    return boost::unit_test::framework::current_test_case();
+  }
 
-    static std::string test_name() {
-        return current_test_case().p_name;
-    }
+  static std::string test_name() { return current_test_case().p_name; }
 
-    static std::string suite_name() {
-        return boost::unit_test::framework::get<boost::unit_test::test_suite>(current_test_case().p_parent_id).p_name;
-    }
+  static std::string suite_name() {
+    return boost::unit_test::framework::get<boost::unit_test::test_suite>(
+               current_test_case().p_parent_id)
+        .p_name;
+  }
 
-    static std::string module_name() {
-        return boost::unit_test::framework::master_test_suite().p_name;
-    }
+  static std::string module_name() {
+    return boost::unit_test::framework::master_test_suite().p_name;
+  }
 #endif
 
 private:
-    fs::path _tempdir;
-    bool _delete_on_exit = false;
+  fs::path _tempdir;
+  bool _delete_on_exit = false;
 };
 
 } // namespace ouinet

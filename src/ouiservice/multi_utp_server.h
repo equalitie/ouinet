@@ -1,38 +1,36 @@
 #pragma once
 
-#include <ouiservice.h>
-#include <boost/asio/ssl.hpp>
+#include "api.h"
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/ip/udp.hpp>
+#include <boost/asio/ssl.hpp>
+#include <ouiservice.h>
 #include <set>
-#include "api.h"
 
 namespace ouinet::ouiservice {
 
-class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer
-{
+class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer {
 private:
-    struct State;
+  struct State;
 
 public:
-    MultiUtpServer( AsioExecutor
-                  , std::set<asio::ip::udp::endpoint>
-                  , boost::asio::ssl::context* ssl_context
-                  , Trace);
+  MultiUtpServer(AsioExecutor, std::set<asio::ip::udp::endpoint>,
+                 boost::asio::ssl::context *ssl_context, Trace);
 
-    [[nodiscard]]
-    sys::error_code start_listen(Async) override;
-    void stop_listen() override;
+  [[nodiscard]]
+  sys::error_code start_listen(Async) override;
+  void stop_listen() override;
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> accept(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> accept(Async) override;
 
-    ~MultiUtpServer();
+  ~MultiUtpServer();
 
 private:
-    std::list<std::unique_ptr<State>> _states;
-    asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
-    Cancel _cancel;
+  std::list<std::unique_ptr<State>> _states;
+  asio::experimental::channel<void(sys::error_code, GenericStream)>
+      _accept_queue;
+  Cancel _cancel;
 };
 
-} // namespaces
+} // namespace ouinet::ouiservice

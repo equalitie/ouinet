@@ -2,7 +2,8 @@
 
 #include <chrono>
 
-namespace ouinet { namespace default_timeout {
+namespace ouinet {
+namespace default_timeout {
 
 // Ongoing data traffic in a connection.
 static inline auto activity() { return std::chrono::minutes(3); }
@@ -26,4 +27,5 @@ static inline auto http_recv_simple_first() { return std::chrono::seconds(5); }
 // (not including the body).
 static inline auto fetch_http() { return std::chrono::minutes(8); }
 
-}} // namespaces
+} // namespace default_timeout
+} // namespace ouinet

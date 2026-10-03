@@ -1,388 +1,404 @@
 #include "injector_config.h"
 
-#include <vector>
-#include <boost/nowide/fstream.hpp>
-#include <boost/filesystem/fstream.hpp>
 #include "bep5_swarms.h"
-#include "parse/endpoint.h"
+#include "config/i2p_service.h"
+#include "constants.h"
 #include "http_logger.h"
 #include "logger.h"
-#include "constants.h"
+#include "parse/endpoint.h"
 #include "ssl/util.h"
-#include "config/i2p_service.h"
+#include <boost/filesystem/fstream.hpp>
+#include <boost/nowide/fstream.hpp>
+#include <vector>
 
 auto i2p_destination_keypair_file_name = "i2p_destination_keypair.json";
 
 namespace ouinet {
 
-boost::program_options::options_description InjectorConfig::options_description()
-{
-    namespace po = boost::program_options;
-    using std::string;
+boost::program_options::options_description
+InjectorConfig::options_description() {
+  namespace po = boost::program_options;
+  using std::string;
 
-    po::options_description desc("Options");
+  po::options_description desc("Options");
 
-    desc.add_options()
-        ("help", "Produce this help message")
-        ("repo", po::value<string>(), "Path to the repository root")
-        ("log-level", po::value<string>()->default_value(util::str(default_log_level()))
-         , "Set log level: silly, debug, verbose, info, warn, error, abort")
-        ("enable-http-log-file"
-         , po::bool_switch()->default_value(false)
-         , "Enable logging of HTTP requests received via public mode"
-           " to log file \"" _HTTP_LOG_FILE_NAME "\" under the repository root")
-        ("bt-bootstrap-extra", po::value<std::vector<string>>()->composing()
-         , "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
-           "to start the DHT (can be used several times). "
-           "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. ")
-        ("bt-bootstrap-no-default", po::bool_switch()->default_value(false)
-         , "Don't use default BitTorrent bootstrap servers."
-           "When this option is enabled, only the servers specified with --bt-bootstrap-extra are used.")
-        ("bt-allow-martians", po::bool_switch()->default_value(false)
-         , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
-        ("udp-mux-rx-limit"
-         , po::value<uint32_t>()->default_value(500)
-         , "Max rate limit that's allowed for incoming packets to the "
-           "UDP multiplexer. The value is expressed in Kbps. To leave it "
-           "unlimited, set it to zero.")
-        ("trace-root"
-         , po::value<string>()
-         , "Tracing prefix added to log lines, useful when debugging multiple "
-           "clients and/or injectors writing log into the same output")
+  desc.add_options()("help", "Produce this help message")(
+      "repo", po::value<string>(), "Path to the repository root")(
+      "log-level",
+      po::value<string>()->default_value(util::str(default_log_level())),
+      "Set log level: silly, debug, verbose, info, warn, error, abort")(
+      "enable-http-log-file", po::bool_switch()->default_value(false),
+      "Enable logging of HTTP requests received via public mode"
+      " to log file \"" _HTTP_LOG_FILE_NAME "\" under the repository root")(
+      "bt-bootstrap-extra", po::value<std::vector<string>>()->composing(),
+      "Extra BitTorrent bootstrap server (in <HOST> or <HOST>:<PORT> format) "
+      "to start the DHT (can be used several times). "
+      "<HOST> can be a host name, <IPv4> address, or <[IPv6]> address. ")(
+      "bt-bootstrap-no-default", po::bool_switch()->default_value(false),
+      "Don't use default BitTorrent bootstrap servers."
+      "When this option is enabled, only the servers specified with "
+      "--bt-bootstrap-extra are used.")(
+      "bt-allow-martians", po::bool_switch()->default_value(false),
+      "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful "
+      "mostly for testing.")(
+      "udp-mux-rx-limit", po::value<uint32_t>()->default_value(500),
+      "Max rate limit that's allowed for incoming packets to the "
+      "UDP multiplexer. The value is expressed in Kbps. To leave it "
+      "unlimited, set it to zero.")(
+      "trace-root", po::value<string>(),
+      "Tracing prefix added to log lines, useful when debugging multiple "
+      "clients and/or injectors writing log into the same output")
 
-        // Injector options
-        ("open-file-limit"
-         , po::value<unsigned int>()
-         , "To increase the maximum number of open files")
+      // Injector options
+      ("open-file-limit", po::value<unsigned int>(),
+       "To increase the maximum number of open files")
 
-        // Transport options
-        ("listen-on-tcp", po::value<string>(), "IP:PORT endpoint on which we'll listen (cleartext)")
-        ("listen-on-tcp-tls", po::value<string>(), "IP:PORT endpoint on which we'll listen (encrypted)")
-        ("listen-on-utp", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (cleartext)")
-        ("listen-on-utp-tls", po::value<string>(), "IP:PORT UDP endpoint on which we'll listen (encrypted)")
-        ("listen-on-i2p",
-         po::value<string>(),
-         "Whether we should be listening on I2P (true/false)")
-        ("i2p-hops-per-tunnel", po::value<size_t>()
-         , "number intermediary hops to be used for I2P garlic routing.")
-        // It always announces the TLS uTP endpoint since
-        // a TLS certificate is always generated.
-        ("credentials", po::value<string>()
-         , "<username>:<password> authentication pair. "
-           "If unused, this injector shall behave as an open proxy.")
-        ("disable-proxy", po::bool_switch(&_disable_proxy)->default_value(false)
-         , "Reject plain HTTP proxy requests (including CONNECT for HTTPS)")
-        ("restricted", po::value<string>()
-         , "Only allow injection of URIs fully matching the given regular expression. "
-           "This option implies \"--disable-proxy\". "
-           "Example: https?://(www\\.)?(example\\.com|test\\.net/foo)/.*")
-        ("allow-private-targets", po::bool_switch(&_allow_private_targets)->default_value(false)
-         , "Allows the injection of targets resolving to private addresses. "
-           "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")
-        ("dns-protocol", po::value<std::vector<string>>()
-                             ->composing()
-                             ->default_value(dns_default_protocols,
-                                             util::join(dns_default_protocols, ","))
-         , "DNS protocols used by the resolver. This option can be set to: plain or https. "
-           "When plain is selected, the resolver will establish UDP/TCP unencrypted connections with "
-           "the nameservers. The option can be used multiple times to select more than one protocol.")
+      // Transport options
+      ("listen-on-tcp", po::value<string>(),
+       "IP:PORT endpoint on which we'll listen (cleartext)")(
+          "listen-on-tcp-tls", po::value<string>(),
+          "IP:PORT endpoint on which we'll listen (encrypted)")(
+          "listen-on-utp", po::value<string>(),
+          "IP:PORT UDP endpoint on which we'll listen (cleartext)")(
+          "listen-on-utp-tls", po::value<string>(),
+          "IP:PORT UDP endpoint on which we'll listen (encrypted)")(
+          "listen-on-i2p", po::value<string>(),
+          "Whether we should be listening on I2P (true/false)")(
+          "i2p-hops-per-tunnel", po::value<size_t>(),
+          "number intermediary hops to be used for I2P garlic routing.")
+      // It always announces the TLS uTP endpoint since
+      // a TLS certificate is always generated.
+      ("credentials", po::value<string>(),
+       "<username>:<password> authentication pair. "
+       "If unused, this injector shall behave as an open proxy.")(
+          "disable-proxy",
+          po::bool_switch(&_disable_proxy)->default_value(false),
+          "Reject plain HTTP proxy requests (including CONNECT for HTTPS)")(
+          "restricted", po::value<string>(),
+          "Only allow injection of URIs fully matching the given regular "
+          "expression. "
+          "This option implies \"--disable-proxy\". "
+          "Example: https?://(www\\.)?(example\\.com|test\\.net/foo)/.*")(
+          "allow-private-targets",
+          po::bool_switch(&_allow_private_targets)->default_value(false),
+          "Allows the injection of targets resolving to private addresses. "
+          "Example: 192.168.1.13, 10.8.0.2, 172.16.10.8, etc.")(
+          "dns-protocol",
+          po::value<std::vector<string>>()->composing()->default_value(
+              dns_default_protocols, util::join(dns_default_protocols, ",")),
+          "DNS protocols used by the resolver. This option can be set to: "
+          "plain or https. "
+          "When plain is selected, the resolver will establish UDP/TCP "
+          "unencrypted connections with "
+          "the nameservers. The option can be used multiple times to select "
+          "more than one protocol.")
 
-        ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
-         , "Path to the CA certificate store directory")
-        ("tls-ca-cert-store-file", po::value<std::vector<string>>(&_tls_ca_cert_store_files)
-         , "Path to the CA certificate store file")
-        // Cache options
-        ("ed25519-private-key", po::value<string>()
-         , "Ed25519 private key for cache-related signatures (hex-encoded)")
-        ;
+          ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir),
+           "Path to the CA certificate store directory")(
+              "tls-ca-cert-store-file",
+              po::value<std::vector<string>>(&_tls_ca_cert_store_files),
+              "Path to the CA certificate store file")
+      // Cache options
+      ("ed25519-private-key", po::value<string>(),
+       "Ed25519 private key for cache-related signatures (hex-encoded)");
 
-    add_i2p_service_options(desc);
+  add_i2p_service_options(desc);
 
-    return desc;
+  return desc;
 }
 
 bool InjectorConfig::_is_http_log_file_enabled() const {
-    return http_logger.get_log_file() != nullptr;
+  return http_logger.get_log_file() != nullptr;
 }
 
 void InjectorConfig::_is_http_log_file_enabled(bool v) {
-    if (!v) {
-        http_logger.log_to_file("");
-        return;
-    }
+  if (!v) {
+    http_logger.log_to_file("");
+    return;
+  }
 
-    if (_is_http_log_file_enabled()) return;
+  if (_is_http_log_file_enabled())
+    return;
 
-    auto current_log_path = http_logger.current_log_file();
-    auto http_log_path = current_log_path.empty()
+  auto current_log_path = http_logger.current_log_file();
+  auto http_log_path = current_log_path.empty()
                            ? (_repo_root / http_log_file_name).string()
                            : current_log_path;
 
-    http_logger.log_to_file(http_log_path);
-    LOG_INFO("Log file set to: ", http_log_path);
+  http_logger.log_to_file(http_log_path);
+  LOG_INFO("Log file set to: ", http_log_path);
 }
 
-InjectorConfig::InjectorConfig(int argc, const char**argv)
-{
-    namespace po = boost::program_options;
-    namespace fs = boost::filesystem;
-    using std::string;
+InjectorConfig::InjectorConfig(int argc, const char **argv) {
+  namespace po = boost::program_options;
+  namespace fs = boost::filesystem;
+  using std::string;
 
-    auto desc = options_description();
+  auto desc = options_description();
 
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
 
-    if (vm.count("trace-root")) {
-        _trace_root = vm["trace-root"].as<string>();
-    }
+  if (vm.count("trace-root")) {
+    _trace_root = vm["trace-root"].as<string>();
+  }
 
-    if (vm.count("help")) {
-        _is_help = true;
-        return;
-    }
+  if (vm.count("help")) {
+    _is_help = true;
+    return;
+  }
 
-    if (!vm.count("repo")) {
-        throw std::runtime_error("The '--repo' option is missing");
-    }
+  if (!vm.count("repo")) {
+    throw std::runtime_error("The '--repo' option is missing");
+  }
 
-    _repo_root = vm["repo"].as<string>();
+  _repo_root = vm["repo"].as<string>();
 
-    if (!fs::exists(_repo_root)) {
-        throw std::runtime_error(
-                util::str("No such directory: ", _repo_root));
-    }
+  if (!fs::exists(_repo_root)) {
+    throw std::runtime_error(util::str("No such directory: ", _repo_root));
+  }
 
-    if (!fs::is_directory(_repo_root)) {
-        throw std::runtime_error(
-                util::str("The path is not a directory: ", _repo_root));
-    }
+  if (!fs::is_directory(_repo_root)) {
+    throw std::runtime_error(
+        util::str("The path is not a directory: ", _repo_root));
+  }
 
-    {
-        fs::path ouinet_conf_path = _repo_root/OUINET_CONF_FILE;
-        if (fs::is_regular_file(ouinet_conf_path)) {
+  {
+    fs::path ouinet_conf_path = _repo_root / OUINET_CONF_FILE;
+    if (fs::is_regular_file(ouinet_conf_path)) {
 #ifdef __WIN32
-            std::ifstream ouinet_conf(ouinet_conf_path.string());
+      std::ifstream ouinet_conf(ouinet_conf_path.string());
 #else
-            std::ifstream ouinet_conf(ouinet_conf_path.native());
+      std::ifstream ouinet_conf(ouinet_conf_path.native());
 #endif
-            po::store(po::parse_config_file(ouinet_conf, desc), vm);
-            po::notify(vm);
-        }
+      po::store(po::parse_config_file(ouinet_conf, desc), vm);
+      po::notify(vm);
+    }
+  }
+
+  if (vm.count("log-level")) {
+    auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
+    auto ll_o = log_level_from_string(level);
+    if (!ll_o)
+      throw std::runtime_error(util::str("Invalid log level: ", level));
+    get_logger().set_threshold(*ll_o);
+    LOG_INFO("Log level set to: ", level);
+  }
+
+  if (vm["enable-http-log-file"].as<bool>()) {
+    _is_http_log_file_enabled(true);
+  }
+
+  if (vm.count("bt-bootstrap-extra")) {
+    for (const auto &btbsx :
+         vm["bt-bootstrap-extra"].as<std::vector<string>>()) {
+      // Better processing will take place later on, just very basic checking
+      // here.
+      auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
+      if (!btbs_addr)
+        throw std::runtime_error(
+            util::str("Invalid BitTorrent bootstrap server: ", btbsx));
+      _bt_bootstrap_extras.insert(*btbs_addr);
+    }
+  }
+
+  if (vm["bt-bootstrap-no-default"].as<bool>()) {
+    _bt_bootstrap_no_default = true;
+  }
+
+  if (vm["bt-allow-martians"].as<bool>()) {
+    _bt_allow_martians = true;
+  }
+
+  if (vm.count("udp-mux-rx-limit")) {
+    _udp_mux_rx_limit = vm["udp-mux-rx-limit"].as<uint32_t>();
+  }
+
+  if (vm.count("open-file-limit")) {
+    _open_file_limit = vm["open-file-limit"].as<unsigned int>();
+  }
+
+  if (vm.count("credentials")) {
+    _credentials = vm["credentials"].as<string>();
+    if (!_credentials.empty() && _credentials.find(':') == string::npos) {
+      throw std::runtime_error(
+          util::str("The '--credentials' argument expects a string "
+                    "in the format <username>:<password>, but the provided "
+                    "string is missing a colon: ",
+                    _credentials));
+    }
+  }
+
+  if (vm.count("restricted")) {
+    _target_rx = boost::regex{vm["restricted"].as<string>()};
+    _disable_proxy = true;
+  }
+
+  if (vm["allow-private-targets"].as<bool>()) {
+    _allow_private_targets = true;
+  }
+
+  auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
+
+  for (const auto &proto_name : opt_protos) {
+    dns::bridge::Protocol proto;
+    try {
+      proto = dns::bridge::str_to_proto(proto_name);
+    } catch (const rust::Error &) {
+      throw error("Invalid argument for option --dns-protocol: ", proto_name);
     }
 
-    if (vm.count("log-level")) {
-        auto level = boost::algorithm::to_upper_copy(vm["log-level"].as<string>());
-        auto ll_o = log_level_from_string(level);
-        if (!ll_o)
-            throw std::runtime_error(util::str("Invalid log level: ", level));
-        get_logger().set_threshold(*ll_o);
-        LOG_INFO("Log level set to: ", level);
+    if (std::ranges::find(_dns_config.protocols, proto) ==
+        _dns_config.protocols.end())
+      _dns_config.protocols.emplace_back(proto);
+  }
+
+  LOG_DEBUG("DNS protocols enabled: [",
+            dns::Resolver::protos_to_str(_dns_config.protocols), "]");
+
+  // Unfortunately, Boost.ProgramOptions doesn't support arguments without
+  // values in config files. Thus we need to force the 'listen-on-i2p' arg
+  // to have one of the strings values "true" or "false".
+  if (vm.count("listen-on-i2p")) {
+    auto value = vm["listen-on-i2p"].as<string>();
+
+    if (value != "" && value != "true" && value != "false") {
+      throw std::runtime_error(
+          "The '--listen-on-i2p' argument may be either 'true' or 'false'");
     }
 
-    if (vm["enable-http-log-file"].as<bool>()) {
-        _is_http_log_file_enabled(true);
+    _listen_on_i2p = (value == "true");
+  }
+
+  if (vm.count("i2p-hops-per-tunnel")) {
+    auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
+
+    if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
+      throw std::runtime_error(
+          util::str("The '--i2p-hops-per-tunnel' argument expects an integer "
+                    "between 1 and 8"));
     }
 
-    if (vm.count("bt-bootstrap-extra")) {
-        for (const auto& btbsx : vm["bt-bootstrap-extra"].as<std::vector<string>>()) {
-            // Better processing will take place later on, just very basic checking here.
-            auto btbs_addr = bittorrent::bootstrap::parse_address(btbsx);
-            if (!btbs_addr)
-                throw std::runtime_error(util::str("Invalid BitTorrent bootstrap server: ", btbsx));
-            _bt_bootstrap_extras.insert(*btbs_addr);
-        }
+    if (!( // If we are not listening on i2p
+            (_listen_on_i2p))) {
+      throw std::runtime_error(
+          "The '--i2p-hops-per-tunnel' argument must be used with "
+          "'--listen-on-i2p option");
     }
 
-    if (vm["bt-bootstrap-no-default"].as<bool>()) {
-        _bt_bootstrap_no_default = true;
+    _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
+  }
+
+  if (vm.count("listen-on-tcp")) {
+    auto opt_tcp_endpoint =
+        parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
+    if (!opt_tcp_endpoint) {
+      throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
     }
+    _tcp_endpoint = *opt_tcp_endpoint;
+  }
 
-    if (vm["bt-allow-martians"].as<bool>()) {
-        _bt_allow_martians = true;
+  if (vm.count("listen-on-tcp-tls")) {
+    auto opt_tcp_tls_endpoint =
+        parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp-tls"].as<string>());
+    if (!opt_tcp_tls_endpoint) {
+      throw std::runtime_error(
+          "Failed to parse '--listen-on-tcp-tls' argument");
     }
+    _tcp_tls_endpoint = *opt_tcp_tls_endpoint;
+  }
 
-    if (vm.count("udp-mux-rx-limit")) {
-        _udp_mux_rx_limit =  vm["udp-mux-rx-limit"].as<uint32_t>();
+  if (vm.count("listen-on-utp")) {
+    sys::error_code ec;
+    auto ep =
+        parse::endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
+    if (ec)
+      throw std::runtime_error("Failed to parse uTP endpoint");
+    _utp_endpoint = ep;
+  }
+
+  if (vm.count("listen-on-utp-tls")) {
+    sys::error_code ec;
+    auto ep = parse::endpoint<asio::ip::udp>(
+        vm["listen-on-utp-tls"].as<string>(), ec);
+    if (ec)
+      throw std::runtime_error("Failed to parse uTP endpoint");
+    _utp_tls_endpoint = ep;
+  }
+
+  // Please note that generating keys takes a long time
+  // and it may cause time outs in CI tests.
+  setup_ed25519_private_key(vm.count("ed25519-private-key")
+                                ? vm["ed25519-private-key"].as<string>()
+                                : string());
+
+  // https://redmine.equalit.ie/issues/14920#note-1
+  _bep5_injector_swarm_name = bep5::compute_injector_swarm_name(
+      _ed25519_private_key.public_key(), http_::protocol_version_current);
+
+  {
+    _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+    ssl::util::load_tls_ca_certificates(_origin_ssl_ctx,
+                                        _tls_ca_cert_store_dir);
+    for (auto &verify_file : _tls_ca_cert_store_files) {
+      sys::error_code ec;
+      _origin_ssl_ctx.load_verify_file(verify_file, ec);
+      if (ec)
+        throw error("Failed to load origin CA certificate from \"", verify_file,
+                    "\"");
     }
+  }
 
-
-    if (vm.count("open-file-limit")) {
-        _open_file_limit = vm["open-file-limit"].as<unsigned int>();
-    }
-
-    if (vm.count("credentials")) {
-        _credentials = vm["credentials"].as<string>();
-        if (!_credentials.empty() && _credentials.find(':') == string::npos) {
-            throw std::runtime_error(util::str(
-                "The '--credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", _credentials));
-        }
-    }
-
-    if (vm.count("restricted")) {
-        _target_rx = boost::regex{vm["restricted"].as<string>()};
-        _disable_proxy = true;
-    }
-
-    if (vm["allow-private-targets"].as<bool>()) {
-        _allow_private_targets = true;
-    }
-
-    auto opt_protos = vm["dns-protocol"].as<std::vector<string>>();
-
-    for (const auto& proto_name : opt_protos) {
-        dns::bridge::Protocol proto;
-        try {
-            proto = dns::bridge::str_to_proto(proto_name);
-        } catch (const rust::Error&) {
-            throw error("Invalid argument for option --dns-protocol: ", proto_name);
-        }
-
-        if ( std::ranges::find(_dns_config.protocols, proto) ==  _dns_config.protocols.end())
-            _dns_config.protocols.emplace_back(proto);
-    }
-
-    LOG_DEBUG( "DNS protocols enabled: ["
-             , dns::Resolver::protos_to_str(_dns_config.protocols)
-             , "]");
-
-
-    // Unfortunately, Boost.ProgramOptions doesn't support arguments without
-    // values in config files. Thus we need to force the 'listen-on-i2p' arg
-    // to have one of the strings values "true" or "false".
-    if (vm.count("listen-on-i2p")) {
-        auto value = vm["listen-on-i2p"].as<string>();
-
-        if (value != "" && value != "true" && value != "false") {
-            throw std::runtime_error(
-                "The '--listen-on-i2p' argument may be either 'true' or 'false'");
-        }
-
-        _listen_on_i2p = (value == "true");
-    }
-
-    if (vm.count("i2p-hops-per-tunnel")) {
-        auto no_of_hops_per_tunnel = vm["i2p-hops-per-tunnel"].as<size_t>();
-
-        if (!no_of_hops_per_tunnel or no_of_hops_per_tunnel > _MAX_I2P_HOPS) {
-            throw std::runtime_error(util::str(
-                "The '--i2p-hops-per-tunnel' argument expects an integer "
-                "between 1 and 8"
-                ));
-        }
-
-        if (!(//If we are not listening on i2p
-              (_listen_on_i2p)))
-          {
-            throw std::runtime_error(
-                "The '--i2p-hops-per-tunnel' argument must be used with "
-                "'--listen-on-i2p option");
-          }
-
-        _i2p_hops_per_tunnel = no_of_hops_per_tunnel;
-    }
-
-    if (vm.count("listen-on-tcp")) {
-        auto opt_tcp_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp"].as<string>());
-        if (!opt_tcp_endpoint) {
-            throw std::runtime_error("Failed to parse '--listen-on-tcp' argument");
-        }
-        _tcp_endpoint = *opt_tcp_endpoint;
-    }
-
-    if (vm.count("listen-on-tcp-tls")) {
-        auto opt_tcp_tls_endpoint = parse::endpoint<asio::ip::tcp>(vm["listen-on-tcp-tls"].as<string>());
-        if (!opt_tcp_tls_endpoint) {
-            throw std::runtime_error("Failed to parse '--listen-on-tcp-tls' argument");
-        }
-        _tcp_tls_endpoint = *opt_tcp_tls_endpoint;
-    }
-
-    if (vm.count("listen-on-utp")) {
-        sys::error_code ec;
-        auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp"].as<string>(), ec);
-        if (ec) throw std::runtime_error("Failed to parse uTP endpoint");
-        _utp_endpoint = ep;
-    }
-
-    if (vm.count("listen-on-utp-tls")) {
-        sys::error_code ec;
-        auto ep = parse::endpoint<asio::ip::udp>(vm["listen-on-utp-tls"].as<string>(), ec);
-        if (ec) throw std::runtime_error("Failed to parse uTP endpoint");
-        _utp_tls_endpoint = ep;
-    }
-
-    // Please note that generating keys takes a long time
-    // and it may cause time outs in CI tests.
-    setup_ed25519_private_key( vm.count("ed25519-private-key")
-                             ? vm["ed25519-private-key"].as<string>()
-                             : string());
-
-    // https://redmine.equalit.ie/issues/14920#note-1
-    _bep5_injector_swarm_name
-        = bep5::compute_injector_swarm_name( _ed25519_private_key.public_key()
-                                           , http_::protocol_version_current);
-
-    {
-        _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
-        ssl::util::load_tls_ca_certificates(_origin_ssl_ctx, _tls_ca_cert_store_dir);
-        for (auto& verify_file : _tls_ca_cert_store_files) {
-            sys::error_code ec;
-            _origin_ssl_ctx.load_verify_file(verify_file, ec);
-            if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
-        }
-    }
-
-    _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
+  _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
 }
 
-void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
-{
-    fs::path priv_config = _repo_root/"ed25519-private-key";
-    fs::path pub_config  = _repo_root/"ed25519-public-key";
+void InjectorConfig::setup_ed25519_private_key(const std::string &hex) {
+  fs::path priv_config = _repo_root / "ed25519-private-key";
+  fs::path pub_config = _repo_root / "ed25519-public-key";
 
-    if (hex.empty()) {
-        if (fs::exists(priv_config)) {
-            boost::nowide::ifstream(priv_config) >> _ed25519_private_key;
-            boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
-            return;
-        }
-
-        _ed25519_private_key = sign::SecretKey::generate();
-
-        boost::nowide::ofstream(priv_config) << _ed25519_private_key;
-        boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
-        return;
+  if (hex.empty()) {
+    if (fs::exists(priv_config)) {
+      boost::nowide::ifstream(priv_config) >> _ed25519_private_key;
+      boost::nowide::ofstream(pub_config) << _ed25519_private_key.public_key();
+      return;
     }
 
-    _ed25519_private_key = *sign::SecretKey::from_hex(hex);
+    _ed25519_private_key = sign::SecretKey::generate();
+
     boost::nowide::ofstream(priv_config) << _ed25519_private_key;
-    boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
+    boost::nowide::ofstream(pub_config) << _ed25519_private_key.public_key();
+    return;
+  }
+
+  _ed25519_private_key = *sign::SecretKey::from_hex(hex);
+  boost::nowide::ofstream(priv_config) << _ed25519_private_key;
+  boost::nowide::ofstream(pub_config) << _ed25519_private_key.public_key();
 }
 
-std::optional<I2pDestinationKeypair> InjectorConfig::load_i2p_destination_keypair() const {
-    auto keypair_path = _repo_root / i2p_destination_keypair_file_name;
+std::optional<I2pDestinationKeypair>
+InjectorConfig::load_i2p_destination_keypair() const {
+  auto keypair_path = _repo_root / i2p_destination_keypair_file_name;
 
-    if (!fs::exists(keypair_path)) {
-        return {};
-    }
+  if (!fs::exists(keypair_path)) {
+    return {};
+  }
 
-    fs::ifstream ifs(keypair_path);
-    std::stringstream buffer;
-    buffer << ifs.rdbuf();
+  fs::ifstream ifs(keypair_path);
+  std::stringstream buffer;
+  buffer << ifs.rdbuf();
 
-    auto keypair = I2pDestinationKeypair::from_json_string(buffer.str());
-    if (!keypair) throw std::runtime_error(util::str("Failed to read ", keypair_path));
+  auto keypair = I2pDestinationKeypair::from_json_string(buffer.str());
+  if (!keypair)
+    throw std::runtime_error(util::str("Failed to read ", keypair_path));
 
-    return std::move(*keypair);
+  return std::move(*keypair);
 }
 
-void InjectorConfig::store_i2p_destination_keypair(const I2pDestinationKeypair& keypair) const {
-    fs::ofstream ofs(_repo_root / i2p_destination_keypair_file_name);
-    ofs << keypair.to_json_string();
+void InjectorConfig::store_i2p_destination_keypair(
+    const I2pDestinationKeypair &keypair) const {
+  fs::ofstream ofs(_repo_root / i2p_destination_keypair_file_name);
+  ofs << keypair.to_json_string();
 }
 
 } // namespace ouinet

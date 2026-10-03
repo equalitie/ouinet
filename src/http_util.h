@@ -1,29 +1,28 @@
 #pragma once
 
-#include <cstdint>
 #include "namespaces.h"
 #include <cstdint>
-#include <string>
 #include <expected>
+#include <string>
 
-#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/fields.hpp>
 #include <boost/beast/http/message.hpp>
-#include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/string_body.hpp>
 #include <boost/beast/http/write.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/lexical_cast.hpp>
 
+#include "api.h"
 #include "constants.h"
 #include "default_timeout.h"
 #include "or_throw.h"
-#include "api.h"
 #include "util.h"
-#include "util/cancel.h"
-#include "util/watch_dog.h"
-#include "util/keep_alive.h"
 #include "util/async.h"
+#include "util/cancel.h"
+#include "util/keep_alive.h"
+#include "util/watch_dog.h"
 
 namespace ouinet {
 
@@ -34,44 +33,39 @@ namespace util {
 // IPv6 addresses are returned without brackets.
 OUINET_COMMON_API
 std::optional<std::pair<std::string, uint16_t>>
-get_host_port(const http::request_header<>&);
+get_host_port(const http::request_header<> &);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Helps parsing and printing contents of `Content-Range` headers.
 struct HttpResponseByteRange {
-    size_t first;
-    size_t last;
-    // Total size of the document (if known)
-    std::optional<size_t> length;
+  size_t first;
+  size_t last;
+  // Total size of the document (if known)
+  std::optional<size_t> length;
 
-    static
-    std::optional<HttpResponseByteRange>
-    parse(boost::string_view);
+  static std::optional<HttpResponseByteRange> parse(boost::string_view);
 
-    bool
-    matches_length(size_t) const;
+  bool matches_length(size_t) const;
 
-    bool
-    matches_length(boost::string_view) const;
+  bool matches_length(boost::string_view) const;
 };
 
 OUINET_COMMON_API
-std::ostream&
-operator<<(std::ostream&, const HttpResponseByteRange&);
+std::ostream &operator<<(std::ostream &, const HttpResponseByteRange &);
 
 struct HttpRequestByteRange {
-    size_t first;
-    size_t last;
+  size_t first;
+  size_t last;
 
-    // Returns none on parse error
-    OUINET_COMMON_API
-    static
-    std::optional<std::vector<HttpRequestByteRange>>
-    parse(boost::string_view);
+  // Returns none on parse error
+  OUINET_COMMON_API
+  static std::optional<std::vector<HttpRequestByteRange>>
+      parse(boost::string_view);
 
-    friend std::ostream& operator<<(std::ostream& os, HttpRequestByteRange const& r) {
-        return os << "{ first: " << r.first << ", last: " << r.last << " }";
-    }
+  friend std::ostream &operator<<(std::ostream &os,
+                                  HttpRequestByteRange const &r) {
+    return os << "{ first: " << r.first << ", last: " << r.last << " }";
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -83,209 +77,177 @@ std::string format_date(boost::posix_time::ptime);
 
 // Return empty is missing or malformed.
 OUINET_COMMON_API
-boost::string_view http_injection_field( const http::response_header<>&
-                                       , std::string_view);
+boost::string_view http_injection_field(const http::response_header<> &,
+                                        std::string_view);
 
-inline
-boost::string_view http_injection_id(const http::response_header<>& rsh)
-{
-    return http_injection_field(rsh, "id");
+inline boost::string_view
+http_injection_id(const http::response_header<> &rsh) {
+  return http_injection_field(rsh, "id");
 }
 
-inline
-boost::string_view http_injection_ts(const http::response_header<>& rsh)
-{
-    return http_injection_field(rsh, "ts");
+inline boost::string_view
+http_injection_ts(const http::response_header<> &rsh) {
+  return http_injection_field(rsh, "ts");
 }
 
 // Send the HTTP request `rq` over `in`,
 // trigger an error on timeout or cancellation,
 // closing `in`.
-template<class StreamIn, class Request>
+template <class StreamIn, class Request>
 [[nodiscard]]
-inline
-std::expected<void, sys::error_code>
-http_request(StreamIn& in, const Request& rq, Async yield_)
-{
-    Async yield = yield_;
-    auto cancelled = yield.cancel_slot([&] { in.close(); });
+inline std::expected<void, sys::error_code>
+http_request(StreamIn &in, const Request &rq, Async yield_) {
+  Async yield = yield_;
+  auto cancelled = yield.cancel_slot([&] { in.close(); });
 
-    auto wdog = watch_dog( in.get_executor(), default_timeout::http_send_simple()
-                         , [&] { yield.cancel(); });
+  auto wdog = watch_dog(in.get_executor(), default_timeout::http_send_simple(),
+                        [&] { yield.cancel(); });
 
-    try {
-        if (auto r = http::async_write(in, rq, yield); !r) {
-            // Ignore `end_of_stream` error, there may still be data in
-            // the receive buffer we can read.
-            if (r.error() != http::error::end_of_stream) {
-                return std::unexpected(r.error());
-            }
-        }
+  try {
+    if (auto r = http::async_write(in, rq, yield); !r) {
+      // Ignore `end_of_stream` error, there may still be data in
+      // the receive buffer we can read.
+      if (r.error() != http::error::end_of_stream) {
+        return std::unexpected(r.error());
+      }
     }
-    catch (Async::Cancelled const&) {
-        if (yield_.is_cancelled()) throw;
-        return std::unexpected(asio::error::timed_out);
-    }
+  } catch (Async::Cancelled const &) {
+    if (yield_.is_cancelled())
+      throw;
+    return std::unexpected(asio::error::timed_out);
+  }
 
-    return {};
+  return {};
 }
 
 // Send the HTTP response `rs` over `out`,
 // trigger an error on timeout or cancellation,
 // closing `out`.
-template<class StreamOut, class Response>
-inline
-void
-http_reply( StreamOut& out
-          , const Response& rs
-          , asio::yield_context yield)
-{
-    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
-                       , [&] { out.close(); });
+template <class StreamOut, class Response>
+inline void http_reply(StreamOut &out, const Response &rs,
+                       asio::yield_context yield) {
+  auto wd = watch_dog(out.get_executor(), default_timeout::http_send_simple(),
+                      [&] { out.close(); });
 
-    sys::error_code ec;
-    http::async_write(out, rs, yield[ec]);
-    if (!wd.is_running()) ec = asio::error::timed_out;
+  sys::error_code ec;
+  http::async_write(out, rs, yield[ec]);
+  if (!wd.is_running())
+    ec = asio::error::timed_out;
 
-    return or_throw(yield, ec);
+  return or_throw(yield, ec);
 }
 
-template<class StreamOut, class Response>
+template <class StreamOut, class Response>
 [[nodiscard]]
-inline
-sys::error_code
-http_reply( StreamOut& out
-          , const Response& rs
-          , Async yield)
-{
-    auto wd = watch_dog( out.get_executor(), default_timeout::http_send_simple()
-                       , [&] { out.close(); });
+inline sys::error_code http_reply(StreamOut &out, const Response &rs,
+                                  Async yield) {
+  auto wd = watch_dog(out.get_executor(), default_timeout::http_send_simple(),
+                      [&] { out.close(); });
 
-    auto r = http::async_write(out, rs, yield);
-    if (!wd.is_running()) return asio::error::timed_out;
-    if (!r.has_value()) return r.error();
-    return sys::error_code();
+  auto r = http::async_write(out, rs, yield);
+  if (!wd.is_running())
+    return asio::error::timed_out;
+  if (!r.has_value())
+    return r.error();
+  return sys::error_code();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 namespace detail {
-    OUINET_COMMON_API
-    boost::optional<http::response<http::empty_body>>
-    http_proto_version_error( unsigned rv
-                            , beast::string_view ov
-                            , beast::string_view ss);
-}
+OUINET_COMMON_API
+boost::optional<http::response<http::empty_body>>
+http_proto_version_error(unsigned rv, beast::string_view ov,
+                         beast::string_view ss);
+} // namespace detail
 
 // Return an error response message if
 // the request contains a protocol version number not matching the current one.
-template<class Request>
-inline
-boost::optional<http::response<http::empty_body>>
-http_proto_version_error( const Request& rq
-                        , beast::string_view oui_version
-                        , beast::string_view server_string)
-{
-    return detail::http_proto_version_error( rq.version()
-                                           , oui_version
-                                           , server_string);
+template <class Request>
+inline boost::optional<http::response<http::empty_body>>
+http_proto_version_error(const Request &rq, beast::string_view oui_version,
+                         beast::string_view server_string) {
+  return detail::http_proto_version_error(rq.version(), oui_version,
+                                          server_string);
 }
 
-template<class Request>
-inline
-boost::optional<http::response<http::empty_body>>
-http_proto_version_error( const Request& rq
-                        , beast::string_view server_string)
-{
-    return http_proto_version_error( rq
-                                   , rq[http_::protocol_version_hdr]
-                                   , server_string);
+template <class Request>
+inline boost::optional<http::response<http::empty_body>>
+http_proto_version_error(const Request &rq, beast::string_view server_string) {
+  return http_proto_version_error(rq, rq[http_::protocol_version_hdr],
+                                  server_string);
 }
 
 namespace detail {
-    OUINET_COMMON_API
-    bool http_proto_version_check_trusted(boost::string_view, unsigned&);
-}
+OUINET_COMMON_API
+bool http_proto_version_check_trusted(boost::string_view, unsigned &);
+} // namespace detail
 
 // Does the `message` contain a usable Ouinet protocol version?
 //
 // Also set `newest_proto_seen` if the `message` contains a greater value,
 // so only call this with a `message` coming from a trusted source.
-template<class Message>
-inline
-bool http_proto_version_check_trusted( const Message& message
-                                     , unsigned& newest_proto_seen)
-{
-    return detail::http_proto_version_check_trusted
-        ( message[http_::protocol_version_hdr]
-        , newest_proto_seen);
+template <class Message>
+inline bool http_proto_version_check_trusted(const Message &message,
+                                             unsigned &newest_proto_seen) {
+  return detail::http_proto_version_check_trusted(
+      message[http_::protocol_version_hdr], newest_proto_seen);
 }
 
 // Create an HTTP error response for the given request `rq`
 // with the given `status`, `server` header and `message` body (text/plain).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
-inline
-http::response<http::string_body>
-http_error( bool keep_alive
-          , http::status status
-          , const char* server
-          , const std::string& proto_error
-          , const std::string& message = "")
-{
-    http::response<http::string_body> rs{status, 11};
+inline http::response<http::string_body>
+http_error(bool keep_alive, http::status status, const char *server,
+           const std::string &proto_error, const std::string &message = "") {
+  http::response<http::string_body> rs{status, 11};
 
-    if (!proto_error.empty()) {
-        assert(boost::regex_match(proto_error, http_::response_error_rx));
-        rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        rs.set(http_::response_error_hdr, proto_error);
-    }
-    rs.set(http::field::server, server);
-    rs.set(http::field::content_type, "text/plain");
-    rs.keep_alive(keep_alive);
-    rs.body() = message;
-    rs.prepare_payload();
+  if (!proto_error.empty()) {
+    assert(boost::regex_match(proto_error, http_::response_error_rx));
+    rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+    rs.set(http_::response_error_hdr, proto_error);
+  }
+  rs.set(http::field::server, server);
+  rs.set(http::field::content_type, "text/plain");
+  rs.keep_alive(keep_alive);
+  rs.body() = message;
+  rs.prepare_payload();
 
-    return rs;
+  return rs;
 }
 
 // Create an HTTP error response for the given request `rq`
 // with the given `status`, `server` header and `message` body (text/html).
 // If `proto_error` is not empty,
 // make this a Ouinet protocol message with that error.
-template<class Request>
-inline
-http::response<http::string_body>
-http_error_html( const Request& rq
-        , http::status status
-        , const char* server
-        , const std::string& proto_error
-        , const std::string& message = "")
-{
-    http::response<http::string_body> rs{status, rq.version()};
+template <class Request>
+inline http::response<http::string_body>
+http_error_html(const Request &rq, http::status status, const char *server,
+                const std::string &proto_error,
+                const std::string &message = "") {
+  http::response<http::string_body> rs{status, rq.version()};
 
-    if (!proto_error.empty()) {
-        assert(boost::regex_match(proto_error, http_::response_error_rx));
-        rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
-        rs.set(http_::response_error_hdr, proto_error);
-    }
-    rs.set(http::field::server, server);
-    rs.set(http::field::content_type, "text/html");
-    rs.keep_alive(rq.keep_alive());
-    rs.body() = message;
-    rs.prepare_payload();
+  if (!proto_error.empty()) {
+    assert(boost::regex_match(proto_error, http_::response_error_rx));
+    rs.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+    rs.set(http_::response_error_hdr, proto_error);
+  }
+  rs.set(http::field::server, server);
+  rs.set(http::field::content_type, "text/html");
+  rs.keep_alive(rq.keep_alive());
+  rs.body() = message;
+  rs.prepare_payload();
 
-    return rs;
+  return rs;
 }
 
-inline
-http::response_header<>
-without_framing(const http::response_header<>& rsh)
-{
-    http::response<http::empty_body> rs(rsh);
-    rs.chunked(false);  // easier with a whole response
-    rs.erase(http::field::content_length);  // 0 anyway because of empty body
-    rs.erase(http::field::trailer);
-    return rs.base();
+inline http::response_header<>
+without_framing(const http::response_header<> &rsh) {
+  http::response<http::empty_body> rs(rsh);
+  rs.chunked(false);                     // easier with a whole response
+  rs.erase(http::field::content_length); // 0 anyway because of empty body
+  rs.erase(http::field::trailer);
+  return rs.base();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -307,127 +269,118 @@ without_framing(const http::response_header<>& rsh)
 // `field_is_one_of(f, http::field::cookie, "Upgrade-Insecure-Requests")`
 
 namespace detail_field_is_one_of {
-    // Specialized compare functions for http::field and char[].
+// Specialized compare functions for http::field and char[].
 
-    template<class> struct Compare;
+template <class> struct Compare;
 
-    template<> struct Compare<http::field> {
-        static bool is_same(const http::fields::value_type& f1, http::field f2) {
-            return f1.name() == f2;
-        }
-    };
+template <> struct Compare<http::field> {
+  static bool is_same(const http::fields::value_type &f1, http::field f2) {
+    return f1.name() == f2;
+  }
+};
 
-    template<size_t N> struct Compare<char[N]> {
-        static bool is_same(const http::fields::value_type& f1, const char* f2) {
-            return boost::iequals(f1.name_string(), f2);
-        }
-    };
-} // detail_field_is_one_of namespace
+template <size_t N> struct Compare<char[N]> {
+  static bool is_same(const http::fields::value_type &f1, const char *f2) {
+    return boost::iequals(f1.name_string(), f2);
+  }
+};
+} // namespace detail_field_is_one_of
 
-inline
-bool field_is_one_of(const http::fields::value_type&) {
-    return false;
-}
+inline bool field_is_one_of(const http::fields::value_type &) { return false; }
 
-template<class First,  class... Rest>
-inline
-bool field_is_one_of(const http::fields::value_type& e,
-                     const First& first,
-                     const Rest&... rest)
-{
-    if (detail_field_is_one_of::Compare<First>::is_same(e, first)) return true;
-    return field_is_one_of(e, rest...);
+template <class First, class... Rest>
+inline bool field_is_one_of(const http::fields::value_type &e,
+                            const First &first, const Rest &...rest) {
+  if (detail_field_is_one_of::Compare<First>::is_same(e, first))
+    return true;
+  return field_is_one_of(e, rest...);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Remove all fields that are not listed in `keep_fields`,
 // nor are Ouinet internal headers.
-template<class Message, class... Fields>
-static Message filter_fields(Message message, const Fields&... keep_fields)
-{
-    for (auto fit = message.begin(); fit != message.end();) {
-        if (!field_is_one_of(*fit, keep_fields...)) {
-            fit = message.erase(fit);
-        } else {
-            fit++;
-        }
+template <class Message, class... Fields>
+static Message filter_fields(Message message, const Fields &...keep_fields) {
+  for (auto fit = message.begin(); fit != message.end();) {
+    if (!field_is_one_of(*fit, keep_fields...)) {
+      fit = message.erase(fit);
+    } else {
+      fit++;
     }
+  }
 
-    return message;
+  return message;
 }
 
-template<class Message>
-static void remove_ouinet_fields_ref(Message& message)
-{
-    for (auto fit = message.begin(); fit != message.end();) {
-        if (boost::istarts_with(fit->name_string(), http_::header_prefix)) {
-            fit = message.erase(fit);
-        } else {
-            fit++;
-        }
+template <class Message>
+static void remove_ouinet_fields_ref(Message &message) {
+  for (auto fit = message.begin(); fit != message.end();) {
+    if (boost::istarts_with(fit->name_string(), http_::header_prefix)) {
+      fit = message.erase(fit);
+    } else {
+      fit++;
     }
+  }
 }
 
-template<class Message>
-static Message remove_ouinet_fields(Message message)
-{
-    remove_ouinet_fields_ref(message);
-    return message;
+template <class Message> static Message remove_ouinet_fields(Message message) {
+  remove_ouinet_fields_ref(message);
+  return message;
 }
 
-// Remove Ouinet protocol fields, but keep a protocol error if present and well-formed.
-template<class Body>
-static void remove_ouinet_nonerrors_ref(http::response_header<Body>& message)
-{
-    auto proto_err = std::string(message[http_::response_error_hdr]);
-    remove_ouinet_fields_ref(message);
+// Remove Ouinet protocol fields, but keep a protocol error if present and
+// well-formed.
+template <class Body>
+static void remove_ouinet_nonerrors_ref(http::response_header<Body> &message) {
+  auto proto_err = std::string(message[http_::response_error_hdr]);
+  remove_ouinet_fields_ref(message);
 
-    if (!boost::regex_match(proto_err, http_::response_error_rx))
-        return;
+  if (!boost::regex_match(proto_err, http_::response_error_rx))
+    return;
 
-    message.set(http_::protocol_version_hdr, std::to_string(http_::protocol_version_current));
-    message.set(http_::response_error_hdr, proto_err);
+  message.set(http_::protocol_version_hdr,
+              std::to_string(http_::protocol_version_current));
+  message.set(http_::response_error_hdr, proto_err);
 }
 
-template<class Response>
-static Response to_non_chunked_response(Response rs) {
-    rs.chunked(false);
-    rs.set(http::field::content_length, rs.body().size());
-    rs.erase(http::field::trailer);  // pointless without chunking
-    return rs;
+template <class Response> static Response to_non_chunked_response(Response rs) {
+  rs.chunked(false);
+  rs.set(http::field::content_length, rs.body().size());
+  rs.erase(http::field::trailer); // pointless without chunking
+  return rs;
 }
 
 // Transform request from absolute-form to origin-form
 // https://tools.ietf.org/html/rfc7230#section-5.3
-template<class Request>
-Request req_form_from_absolute_to_origin(const Request& absolute_req)
-{
-    // Parse the URL to tell HTTP/HTTPS, host, port.
+template <class Request>
+Request req_form_from_absolute_to_origin(const Request &absolute_req) {
+  // Parse the URL to tell HTTP/HTTPS, host, port.
 
-    auto absolute_target = absolute_req.target();
+  auto absolute_target = absolute_req.target();
 
-    auto url = Url::from(absolute_target);
+  auto url = Url::from(absolute_target);
 
-    if (!url) {
-        // It's already in origin form
-        return absolute_req;
-    }
+  if (!url) {
+    // It's already in origin form
+    return absolute_req;
+  }
 
-    Request origin_req(absolute_req);
+  Request origin_req(absolute_req);
 
-    origin_req.target(absolute_target.substr(
-                absolute_target.find( url->path
-                                    // Length of "http://" or "https://",
-                                    // do not fail on "http(s)://FOO/FOO".
-                                    , url->scheme.length() + 3)));
+  origin_req.target(absolute_target.substr(
+      absolute_target.find(url->path
+                           // Length of "http://" or "https://",
+                           // do not fail on "http(s)://FOO/FOO".
+                           ,
+                           url->scheme.length() + 3)));
 
-    return origin_req;
+  return origin_req;
 }
 
 namespace detail {
-    OUINET_COMMON_API
-    std::string http_host_header(const std::string&, const std::string&);
-}
+OUINET_COMMON_API
+std::string http_host_header(const std::string &, const std::string &);
+} // namespace detail
 
 // Add a `Host:` header to `req` if missing or empty.
 //
@@ -437,23 +390,25 @@ namespace detail {
 //
 // This applies mainly to HTTP/1.0 requests,
 // as HTTP/1.1 should always have a non-empty `Host:` header.
-template<class Request>
-bool req_ensure_host(Request& req) {
-    if (!req[http::field::host].empty()) return true;
-
-    auto host_port = util::get_host_port(req);
-    if (!host_port) return false;
-    auto [host, port] = std::move(*host_port);
-    auto hosth = detail::http_host_header(host, std::to_string(port));
-    if (hosth.empty()) return false;  // error
-    req.set(http::field::host, hosth);
+template <class Request> bool req_ensure_host(Request &req) {
+  if (!req[http::field::host].empty())
     return true;
+
+  auto host_port = util::get_host_port(req);
+  if (!host_port)
+    return false;
+  auto [host, port] = std::move(*host_port);
+  auto hosth = detail::http_host_header(host, std::to_string(port));
+  if (hosth.empty())
+    return false; // error
+  req.set(http::field::host, hosth);
+  return true;
 }
 
-inline
-std::string canonical_url(Url urlm) {
-    if (!urlm.fragment.empty()) urlm.fragment = {};
-    return urlm.reassemble();  // TODO: make canonical
+inline std::string canonical_url(Url urlm) {
+  if (!urlm.fragment.empty())
+    urlm.fragment = {};
+  return urlm.reassemble(); // TODO: make canonical
 }
 
 // Make the given request canonical.
@@ -464,44 +419,44 @@ std::string canonical_url(Url urlm) {
 // Internal Ouinet headers and headers in `keep_fields` are also kept.
 //
 // If the request is invalid, none is returned.
-template<class Request, class... Fields>
+template <class Request, class... Fields>
 static boost::optional<Request>
-_to_canonical_request(Request rq, const Fields&... keep_fields) {
-    auto url = Url::from(rq.target());
-    if (!url) return boost::none;
-    auto rq_host = url->port.empty() ? url->host : url->host + ":" + url->port;
-    rq.target(canonical_url(std::move(*url)));
-    rq.version(11);  // HTTP/1.1
+_to_canonical_request(Request rq, const Fields &...keep_fields) {
+  auto url = Url::from(rq.target());
+  if (!url)
+    return boost::none;
+  auto rq_host = url->port.empty() ? url->host : url->host + ":" + url->port;
+  rq.target(canonical_url(std::move(*url)));
+  rq.version(11); // HTTP/1.1
 
-    // Some canonical header values that need ADD, KEEP or PROCESS.
-    rq.set(http::field::host, rq_host);
-    rq.set(http::field::accept, "*/*");
-    rq.set(http::field::accept_encoding, "");
-    rq.set("DNT", "1");
-    rq.set("Upgrade-Insecure-Requests", "1");
-    rq.set( http::field::user_agent
-          , "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0");
+  // Some canonical header values that need ADD, KEEP or PROCESS.
+  rq.set(http::field::host, rq_host);
+  rq.set(http::field::accept, "*/*");
+  rq.set(http::field::accept_encoding, "");
+  rq.set("DNT", "1");
+  rq.set("Upgrade-Insecure-Requests", "1");
+  rq.set(
+      http::field::user_agent,
+      "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0");
 
-    // Basically only keep headers which are absolutely necessary,
-    // do not break privacy and can not break browsing for others.
-    // For the moment we do not yet care about
-    // requests coming from Ouinet injector being fingerprinted as such.
-    return filter_fields( std::move(rq)
-                        // Still DROP some fields that may break browsing for others
-                        // and which have no sensible default (for all).
-                        , http::field::connection
-                        , http::field::host
-                        , http::field::accept
-                        //, http::field::accept_datetime  // DROP
-                        , http::field::accept_encoding
-                        //, http::field::accept_language  // DROP
-                        , "DNT"
-                        , http::field::from
-                        , http::field::origin
-                        , "Upgrade-Insecure-Requests"
-                        , http::field::user_agent
-                        , keep_fields...
-                        );
+  // Basically only keep headers which are absolutely necessary,
+  // do not break privacy and can not break browsing for others.
+  // For the moment we do not yet care about
+  // requests coming from Ouinet injector being fingerprinted as such.
+  return filter_fields(std::move(rq)
+                       // Still DROP some fields that may break browsing for
+                       // others and which have no sensible default (for all).
+                       ,
+                       http::field::connection, http::field::host,
+                       http::field::accept
+                       //, http::field::accept_datetime  // DROP
+                       ,
+                       http::field::accept_encoding
+                       //, http::field::accept_language  // DROP
+                       ,
+                       "DNT", http::field::from, http::field::origin,
+                       "Upgrade-Insecure-Requests", http::field::user_agent,
+                       keep_fields...);
 }
 
 // Make the given request ready to be sent to the injector.
@@ -510,41 +465,37 @@ _to_canonical_request(Request rq, const Fields&... keep_fields) {
 // plus proxy authorization headers and caching headers.
 //
 // If the request is invalid, none is returned.
-template<class Request>
-static boost::optional<Request>
-to_injector_request(Request rq) {
-    // The Ouinet version header hints the endpoint
-    // to behave like an injector instead of a proxy.
-    rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
+template <class Request>
+static boost::optional<Request> to_injector_request(Request rq) {
+  // The Ouinet version header hints the endpoint
+  // to behave like an injector instead of a proxy.
+  rq.set(http_::protocol_version_hdr, http_::protocol_version_hdr_current);
 
-    return _to_canonical_request( std::move(rq)
-                               // PROXY AUTHENTICATION HEADERS (PASS)
-                               , http::field::proxy_authorization
-                               // CACHING AND RANGE HEADERS (PASS)
-                               , http::field::cache_control
-                               , http::field::if_match
-                               , http::field::if_modified_since
-                               , http::field::if_none_match
-                               , http::field::if_range
-                               , http::field::if_unmodified_since
-                               , http::field::pragma
-                               , http::field::range
-                               , http::string_to_field(http_::request_druid_hdr)
-                               , http::string_to_field(http_::protocol_version_hdr)
-                               );
+  return _to_canonical_request(
+      std::move(rq)
+      // PROXY AUTHENTICATION HEADERS (PASS)
+      ,
+      http::field::proxy_authorization
+      // CACHING AND RANGE HEADERS (PASS)
+      ,
+      http::field::cache_control, http::field::if_match,
+      http::field::if_modified_since, http::field::if_none_match,
+      http::field::if_range, http::field::if_unmodified_since,
+      http::field::pragma, http::field::range,
+      http::string_to_field(http_::request_druid_hdr),
+      http::string_to_field(http_::protocol_version_hdr));
 }
 
 // Make the given request ready to be sent to the origin by
-// using origin request target form (<https://tools.ietf.org/html/rfc7230#section-5.3.1>),
-// removing Ouinet-specific internal HTTP headers and
-// proxy authorization headers.
+// using origin request target form
+// (<https://tools.ietf.org/html/rfc7230#section-5.3.1>), removing
+// Ouinet-specific internal HTTP headers and proxy authorization headers.
 //
 // The rest of headers are left intact.
-template<class Request>
-static Request to_origin_request(Request rq) {
-    rq = req_form_from_absolute_to_origin(std::move(rq));
-    rq.erase(http::field::proxy_authorization);
-    return remove_ouinet_fields(std::move(rq));
+template <class Request> static Request to_origin_request(Request rq) {
+  rq = req_form_from_absolute_to_origin(std::move(rq));
+  rq.erase(http::field::proxy_authorization);
+  return remove_ouinet_fields(std::move(rq));
 }
 
 // Make the given request ready to be sent to the cache.
@@ -552,29 +503,32 @@ static Request to_origin_request(Request rq) {
 // This means a canonical request with no additional headers.
 //
 // If the request is invalid, none is returned.
-template<class Request>
-static boost::optional<Request>
-to_cache_request(Request rq) {
-    return _to_canonical_request(std::move(rq));
+template <class Request>
+static boost::optional<Request> to_cache_request(Request rq) {
+  return _to_canonical_request(std::move(rq));
 }
 
 // Make the given response ready to be sent to the cache.
 // This only leaves a minimum set of non-privacy sensitive headers.
 // An error code may be set if the response can not be safely converted to
 // a cache response.
-http::response_header<> to_cache_response(http::response_header<>, sys::error_code&);
+http::response_header<> to_cache_response(http::response_header<>,
+                                          sys::error_code &);
 
-template<class Body>
-static http::response<Body> to_cache_response(http::response<Body> rs, sys::error_code& ec) {
-    // Disable chunked transfer encoding and use actual body size as content length.
-    // This allows sharing the plain body representation with other platforms.
-    // It also compensates for the lack of body data size field in v0 descriptors.
-    rs = to_non_chunked_response(move(rs));
+template <class Body>
+static http::response<Body> to_cache_response(http::response<Body> rs,
+                                              sys::error_code &ec) {
+  // Disable chunked transfer encoding and use actual body size as content
+  // length. This allows sharing the plain body representation with other
+  // platforms. It also compensates for the lack of body data size field in v0
+  // descriptors.
+  rs = to_non_chunked_response(move(rs));
 
-    auto rsh = to_cache_response(move(rs.base()), ec);
-    return http::response<Body>(move(rsh), move(rs.body()));
+  auto rsh = to_cache_response(move(rs.base()), ec);
+  return http::response<Body>(move(rsh), move(rs.body()));
 }
 
 http::fields to_cache_trailer(http::fields rst);
 
-}} // ouinet::util namespace
+} // namespace util
+} // namespace ouinet

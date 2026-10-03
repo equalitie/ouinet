@@ -7,154 +7,151 @@
 
 namespace ouinet {
 
-template<class Retval> class AsyncJob {
+template <class Retval> class AsyncJob {
 public:
-    using Result = std::expected<Retval, sys::error_code>;
-    using Job = std::function<Result(Async)>;
-    using OnFinish = std::function<void()>;
-    using Connection = typename Cancel::Connection;
-
+  using Result = std::expected<Retval, sys::error_code>;
+  using Job = std::function<Result(Async)>;
+  using OnFinish = std::function<void()>;
+  using Connection = typename Cancel::Connection;
 
 public:
-    AsyncJob(const AsioExecutor& ex)
-        : _ex(ex)
-    {}
+  AsyncJob(const AsioExecutor &ex) : _ex(ex) {}
 
-    AsyncJob(const AsyncJob&) = delete;
+  AsyncJob(const AsyncJob &) = delete;
 
-    AsyncJob(AsyncJob&& other)
-        : _ex(std::move(other._ex))
-        , _result(std::move(other._result))
-        , _cancel_signal(other._cancel_signal)
-        , _self(other._self)
-        , _on_finish_sig(std::move(other._on_finish_sig))
-    {
-        if (_self) { *_self = this; }
-
-        other._cancel_signal = nullptr;
-        other._self = nullptr;
+  AsyncJob(AsyncJob &&other)
+      : _ex(std::move(other._ex)), _result(std::move(other._result)),
+        _cancel_signal(other._cancel_signal), _self(other._self),
+        _on_finish_sig(std::move(other._on_finish_sig)) {
+    if (_self) {
+      *_self = this;
     }
 
-    AsyncJob& operator=(AsyncJob&& other) {
-        _result = std::move(other._result);
-        _cancel_signal = other._cancel_signal;
-        _on_finish_sig = std::move(other._on_finish_sig);
+    other._cancel_signal = nullptr;
+    other._self = nullptr;
+  }
 
-        _self = other._self;
-        if (_self) *_self = this;
-        other._cancel_signal = nullptr;
-        other._self = nullptr;
+  AsyncJob &operator=(AsyncJob &&other) {
+    _result = std::move(other._result);
+    _cancel_signal = other._cancel_signal;
+    _on_finish_sig = std::move(other._on_finish_sig);
 
-        return *this;
-    }
+    _self = other._self;
+    if (_self)
+      *_self = this;
+    other._cancel_signal = nullptr;
+    other._self = nullptr;
 
-    void start(Job job) {
-        assert(!_self && "Already started");
-        if (_self) return;
+    return *this;
+  }
 
-        AsyncJob* s = this;
-        task::spawn_detached(_ex, [s, job = std::move(job)]
-                         (asio::yield_context yield) {
-            AsyncJob* self = s;
+  void start(Job job) {
+    assert(!_self && "Already started");
+    if (_self)
+      return;
 
-            Cancel cancel;
+    AsyncJob *s = this;
+    task::spawn_detached(
+        _ex, [s, job = std::move(job)](asio::yield_context yield) {
+          AsyncJob *self = s;
 
-            self->_self = &self;
-            self->_cancel_signal = &cancel;
+          Cancel cancel;
 
-            std::optional<Result> result;
+          self->_self = &self;
+          self->_cancel_signal = &cancel;
 
-            try {
-                result = job(Async(yield, cancel));
-            }
-            catch (Async::Cancelled const&) {
-                result = std::unexpected(asio::error::operation_aborted);
-            }
+          std::optional<Result> result;
 
-            if (!self) return;
+          try {
+            result = job(Async(yield, cancel));
+          } catch (Async::Cancelled const &) {
+            result = std::unexpected(asio::error::operation_aborted);
+          }
 
-            self->_self = nullptr;
-            self->_cancel_signal = nullptr;
+          if (!self)
+            return;
 
-            self->_result = std::move(*result);
+          self->_self = nullptr;
+          self->_cancel_signal = nullptr;
 
-            auto on_finish_sig = std::move(self->_on_finish_sig);
-            on_finish_sig();
+          self->_result = std::move(*result);
+
+          auto on_finish_sig = std::move(self->_on_finish_sig);
+          on_finish_sig();
         });
+  }
+
+  ~AsyncJob() {
+    if (_self)
+      *_self = nullptr;
+    if (_cancel_signal)
+      (*_cancel_signal)();
+  }
+
+  bool was_started() const { return is_running() || has_result(); }
+
+  bool has_result() const { return bool(_result); }
+
+  const Result &result() const & { return *_result; }
+  Result &result() & { return *_result; }
+  Result &&result() && { return std::move(*_result); }
+
+  std::optional<Connection> on_finish_sig(OnFinish on_finish) {
+    if (!_self) {
+      return std::nullopt;
+    } else {
+      return _on_finish_sig.connect(std::move(on_finish));
+    }
+  }
+
+  bool is_running() const { return _self; }
+
+  void stop(asio::yield_context yield) {
+    if (!is_running())
+      return;
+    cancel();
+    ConditionVariable cv(_ex);
+    auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
+    cv.wait(yield);
+  }
+
+  void stop(Async yield) {
+    if (!is_running())
+      return;
+    cancel();
+    ConditionVariable cv(_ex);
+    auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
+    cv.wait(yield).value();
+  }
+
+  void wait_for_finish(Async yield) {
+    if (!is_running())
+      return;
+
+    std::optional<Cancel::Connection> cancelled;
+    if (_cancel_signal) {
+      cancelled = _cancel_signal->connect([&] { yield.cancel(); });
     }
 
-    ~AsyncJob() {
-        if (_self) *_self = nullptr;
-        if (_cancel_signal) (*_cancel_signal)();
+    ConditionVariable cv(_ex);
+    auto finished = _on_finish_sig.connect([&cv] { cv.notify(); });
+
+    cv.wait(yield).value();
+  }
+
+  void cancel() {
+    if (_cancel_signal) {
+      (*_cancel_signal)();
+      _cancel_signal = nullptr;
     }
-
-    bool was_started() const {
-        return is_running() || has_result();
-    }
-
-    bool has_result() const {
-        return bool(_result);
-    }
-
-    const Result&  result() const& { return *_result; }
-          Result&  result() &      { return *_result; }
-          Result&& result() &&     { return std::move(*_result); }
-
-    std::optional<Connection> on_finish_sig(OnFinish on_finish)
-    {
-        if (!_self) {
-            return std::nullopt;
-        }
-        else {
-            return _on_finish_sig.connect(std::move(on_finish));
-        }
-    }
-
-    bool is_running() const { return _self; }
-
-    void stop(asio::yield_context yield) {
-        if (!is_running()) return;
-        cancel();
-        ConditionVariable cv(_ex);
-        auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
-        cv.wait(yield);
-    }
-
-    void stop(Async yield) {
-        if (!is_running()) return;
-        cancel();
-        ConditionVariable cv(_ex);
-        auto con = _on_finish_sig.connect([&cv] { cv.notify(); });
-        cv.wait(yield).value();
-    }
-
-    void wait_for_finish(Async yield) {
-        if (!is_running()) return;
-
-        std::optional<Cancel::Connection> cancelled;
-        if (_cancel_signal) {
-            cancelled = _cancel_signal->connect([&] { yield.cancel(); });
-        }
-
-        ConditionVariable cv(_ex);
-        auto finished = _on_finish_sig.connect([&cv] { cv.notify(); });
-
-        cv.wait(yield).value();
-    }
-
-    void cancel() {
-        if (_cancel_signal) {
-            (*_cancel_signal)();
-            _cancel_signal = nullptr;
-        }
-    }
+  }
 
 private:
-    AsioExecutor _ex;
-    std::optional<Result> _result;
-    Cancel* _cancel_signal = nullptr;
-    AsyncJob** _self = nullptr;
-    Cancel _on_finish_sig;
+  AsioExecutor _ex;
+  std::optional<Result> _result;
+  Cancel *_cancel_signal = nullptr;
+  AsyncJob **_self = nullptr;
+  Cancel _on_finish_sig;
 };
 
-} // namespace
+} // namespace ouinet

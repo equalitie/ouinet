@@ -1,91 +1,98 @@
 #pragma once
 
-#include <boost/asio/ip/address.hpp>
-#include <boost/optional.hpp>
-#include <string>
-#include <array>
 #include "../namespaces.h"
 #include "../util/bytes.h"
 #include "api.h"
+#include <array>
+#include <boost/asio/ip/address.hpp>
+#include <boost/optional.hpp>
+#include <string>
 
-namespace ouinet { namespace bittorrent {
+namespace ouinet {
+namespace bittorrent {
 
 struct OUINET_COMMON_API NodeID {
-    static constexpr size_t size     = 20;
-    static constexpr size_t bit_size = size * 8;
+  static constexpr size_t size = 20;
+  static constexpr size_t bit_size = size * 8;
 
-    using Buffer = std::array<uint8_t, size>;
+  using Buffer = std::array<uint8_t, size>;
 
-    struct OUINET_COMMON_API Range {
-        Buffer stencil;
-        size_t mask;
+  struct OUINET_COMMON_API Range {
+    Buffer stencil;
+    size_t mask;
 
-        NodeID random_id() const;
-        Range reduce(bool bit) const;
+    NodeID random_id() const;
+    Range reduce(bool bit) const;
 
-        static const Range& max();
-    };
+    static const Range &max();
+  };
 
-    // buffer[0] is the most signifficant byte
-    Buffer buffer;
+  // buffer[0] is the most signifficant byte
+  Buffer buffer;
 
-    NodeID() = default;
-    NodeID(const NodeID& other) : buffer(other.buffer) {}
-    NodeID(const Buffer& buffer) : buffer(buffer) {}
+  NodeID() = default;
+  NodeID(const NodeID &other) : buffer(other.buffer) {}
+  NodeID(const Buffer &buffer) : buffer(buffer) {}
 
-    // XXX: `bit(0)` is the most signifficant, perhaps the function should be
-    // called `rbit` ('r' for reverse)?
-    bool bit(int n) const;
-    void set_bit(int n, bool value);
+  // XXX: `bit(0)` is the most signifficant, perhaps the function should be
+  // called `rbit` ('r' for reverse)?
+  bool bit(int n) const;
+  void set_bit(int n, bool value);
 
-    std::string to_hex() const { return util::bytes::to_hex(buffer); }
+  std::string to_hex() const { return util::bytes::to_hex(buffer); }
 
-    static boost::optional<NodeID> from_hex(boost::string_view hex) {
-        auto os = util::bytes::from_hex(hex);
-        if (!os) return boost::none;
-        return NodeID{ util::bytes::to_array<uint8_t, size>(*os) };
-    }
+  static boost::optional<NodeID> from_hex(boost::string_view hex) {
+    auto os = util::bytes::from_hex(hex);
+    if (!os)
+      return boost::none;
+    return NodeID{util::bytes::to_array<uint8_t, size>(*os)};
+  }
 
-    std::string to_printable() const { return util::bytes::to_printable(buffer); }
+  std::string to_printable() const { return util::bytes::to_printable(buffer); }
 
-    std::string to_bitstr() const;
+  std::string to_bitstr() const;
 
-    static boost::optional<NodeID> from_printable(boost::string_view s) {
-        auto a = util::bytes::from_printable(s);
-        if (!a) return boost::none;
-        return NodeID{util::bytes::to_array<uint8_t, size>(*a)};
-    }
+  static boost::optional<NodeID> from_printable(boost::string_view s) {
+    auto a = util::bytes::from_printable(s);
+    if (!a)
+      return boost::none;
+    return NodeID{util::bytes::to_array<uint8_t, size>(*a)};
+  }
 
-    std::string to_bytestring() const { return util::bytes::to_string(buffer); }
+  std::string to_bytestring() const { return util::bytes::to_string(buffer); }
 
-    static NodeID from_bytestring(boost::string_view bytestring) {
-        return NodeID{ util::bytes::to_array<uint8_t, size>(bytestring) };
-    }
+  static NodeID from_bytestring(boost::string_view bytestring) {
+    return NodeID{util::bytes::to_array<uint8_t, size>(bytestring)};
+  }
 
-    static NodeID zero();
-    static NodeID max();
-    static NodeID random();
+  static NodeID zero();
+  static NodeID max();
+  static NodeID random();
 
-    // http://bittorrent.org/beps/bep_0042.html
-    static NodeID generate(asio::ip::address address);
+  // http://bittorrent.org/beps/bep_0042.html
+  static NodeID generate(asio::ip::address address);
 
-    bool operator==(const NodeID& other) const { return buffer == other.buffer; }
-    bool operator<(const NodeID& other) const { return buffer < other.buffer; }
-    bool operator<=(const NodeID& other) const { return !(other.buffer < buffer); }
-    bool operator>(const NodeID& other) const { return other.buffer < buffer; }
-    NodeID operator^(const NodeID& other) const;
+  bool operator==(const NodeID &other) const { return buffer == other.buffer; }
+  bool operator<(const NodeID &other) const { return buffer < other.buffer; }
+  bool operator<=(const NodeID &other) const {
+    return !(other.buffer < buffer);
+  }
+  bool operator>(const NodeID &other) const { return other.buffer < buffer; }
+  NodeID operator^(const NodeID &other) const;
 
-    // Return true if `left` is closer to `this` than `right` is in the XOR
-    // metrics.
-    bool closer_to(const NodeID& left, const NodeID& right) const;
-    NodeID distance_to(const NodeID&) const;
+  // Return true if `left` is closer to `this` than `right` is in the XOR
+  // metrics.
+  bool closer_to(const NodeID &left, const NodeID &right) const;
+  NodeID distance_to(const NodeID &) const;
 
-    private:
-    static NodeID generate( asio::ip::address address
-                          , boost::optional<uint8_t> test_rnd);
+private:
+  static NodeID generate(asio::ip::address address,
+                         boost::optional<uint8_t> test_rnd);
 };
 
-OUINET_COMMON_API std::ostream& operator<<(std::ostream&, const NodeID&);
-OUINET_COMMON_API std::ostream& operator<<(std::ostream&, const NodeID::Range&);
+OUINET_COMMON_API std::ostream &operator<<(std::ostream &, const NodeID &);
+OUINET_COMMON_API std::ostream &operator<<(std::ostream &,
+                                           const NodeID::Range &);
 
-}} // namespaces
+} // namespace bittorrent
+} // namespace ouinet

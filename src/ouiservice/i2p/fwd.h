@@ -3,24 +3,24 @@
 // Forward declarations
 
 namespace i2p::client {
-    class ClientDestination;
+class ClientDestination;
 }
 
 namespace ouinet {
-    namespace i2p_direct {
-        class Server;
-        class Client;
-        class Service;
-        using I2pClientDestination = i2p::client::ClientDestination;
-    }
+namespace i2p_direct {
+class Server;
+class Client;
+class Service;
+using I2pClientDestination = i2p::client::ClientDestination;
+} // namespace i2p_direct
 
-    //using I2pServer = i2p_direct::Server;
-    //using I2pClient = i2p_direct::Client;
-    //using I2pService = i2p_direct::Service;
-    //using I2pClientDestination = i2p::client::ClientDestination;
+// using I2pServer = i2p_direct::Server;
+// using I2pClient = i2p_direct::Client;
+// using I2pService = i2p_direct::Service;
+// using I2pClientDestination = i2p::client::ClientDestination;
 
-    class I2pSession;
-    class I2pTracker;
-    class I2pTrackerLookup;
-    class I2pAnnouncer;
-}
+class I2pSession;
+class I2pTracker;
+class I2pTrackerLookup;
+class I2pAnnouncer;
+} // namespace ouinet

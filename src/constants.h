@@ -3,22 +3,23 @@
 #include <boost/config.hpp>
 #include <boost/regex.hpp>
 
-#define OUINET_CLIENT_SERVER_STRING   "Ouinet.Client"
+#define OUINET_CLIENT_SERVER_STRING "Ouinet.Client"
 #define OUINET_INJECTOR_SERVER_STRING "Ouinet.Injector"
 
-namespace ouinet { namespace http_ {
+namespace ouinet {
+namespace http_ {
 // TODO: This should be called ``http``,
 // but it is already being used as an alias for ``boost::http``.
 
 // Common prefix for all Ouinet-specific internal HTTP headers.
 static const std::string header_prefix = "X-Ouinet-";
 
-
 // Version-independent headers:
 
 // The presence of this (non-empty) HTTP request header
 // shows the protocol version used by the client
-// and hints the receiving injector to behave like an injector instead of a proxy.
+// and hints the receiving injector to behave like an injector instead of a
+// proxy.
 //
 // Such a request should get the following HTTP response header
 // indicating the protocol version used by the injector.
@@ -43,23 +44,29 @@ static const unsigned protocol_version_current = 7;
 // indicates that an error happened processing the request,
 // with information complementing the HTTP status code.
 //
-// The format of this header is guaranteed to be `[0-9]+ [\x21-\x7E][\x20-\x7E]*`
-// for all versions of the protocol (including future ones).
+// The format of this header is guaranteed to be `[0-9]+
+// [\x21-\x7E][\x20-\x7E]*` for all versions of the protocol (including future
+// ones).
 //
 // This means that, for any request with any value of `X-Ouinet-Version`
 // (even newer than those accepted by the receiver),
 // a response with just the same `X-Ouinet-Version` and an `X-Ouinet-Error`
 // shall always be accepted.
 static const std::string response_error_hdr = header_prefix + "Error";
-static const boost::regex response_error_rx("^([0-9]+) ([\\x21-\\x7E][\\x20-\\x7E]*)$");
+static const boost::regex
+    response_error_rx("^([0-9]+) ([\\x21-\\x7E][\\x20-\\x7E]*)$");
 
 // Internal error codes.
-static const std::string response_error_hdr_version_too_low    = "1 Client's version too low";
-static const std::string response_error_hdr_version_too_high   = "2 Client's version too high";
-static const std::string response_error_hdr_retrieval_failed   = "3 Resource retrieval failed";
-static const std::string response_error_hdr_proxy_disabled     = "4 Proxy support disabled";
-static const std::string response_error_hdr_target_not_allowed = "5 Request target not allowed";
-
+static const std::string response_error_hdr_version_too_low =
+    "1 Client's version too low";
+static const std::string response_error_hdr_version_too_high =
+    "2 Client's version too high";
+static const std::string response_error_hdr_retrieval_failed =
+    "3 Resource retrieval failed";
+static const std::string response_error_hdr_proxy_disabled =
+    "4 Proxy support disabled";
+static const std::string response_error_hdr_target_not_allowed =
+    "5 Request target not allowed";
 
 // Version-dependent headers:
 
@@ -76,8 +83,8 @@ static const std::string response_injection_hdr = header_prefix + "Injection";
 static const std::string response_descriptor_hdr = header_prefix + "Descriptor";
 
 // Also, this is added with a link to descriptor storage.
-static const std::string response_descriptor_link_hdr = header_prefix + "Descriptor-Link";
-
+static const std::string response_descriptor_link_hdr =
+    header_prefix + "Descriptor-Link";
 
 // Other headers (e.g. agent-only):
 
@@ -112,15 +119,15 @@ static const std::string request_group_hdr = header_prefix + "Group";
 // absence of the `request_group_hdr` because on Apple devices the user agent
 // can't set it.
 static const std::string request_private_hdr = header_prefix + "Private";
-static const std::string request_private_true = "true";  // case insensitive
+static const std::string request_private_true = "true"; // case insensitive
 
-} // http_ namespace
+} // namespace http_
 
 static const uint16_t default_udp_port = 28729;
 static const uint16_t random_port_selection = 0;
-static constexpr uint32_t udp_mux_rx_limit_client = 0; // Unlimited
+static constexpr uint32_t udp_mux_rx_limit_client = 0;     // Unlimited
 static constexpr uint32_t udp_mux_rx_limit_injector = 500; // Kbps
 
 static const std::vector<std::string> dns_default_protocols({"https"});
 
-} // ouinet namespace
+} // namespace ouinet

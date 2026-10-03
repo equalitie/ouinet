@@ -1,20 +1,20 @@
-#include <boost/asio/spawn.hpp>
-#include <list>
-#include <sstream>
-#include <iomanip>
-#include <cstdlib>
-#include <ctime>
 #include "announcer.h"
-#include "util/async_queue.h"
-#include "logger.h"
-#include "defer.h"
 #include "../util/compat.h"
 #include "../util/debug.h"
 #include "../util/wait_condition.h"
 #include "async_sleep.h"
 #include "bittorrent/node_id.h"
+#include "defer.h"
+#include "logger.h"
 #include "task.h"
+#include "util/async_queue.h"
+#include <boost/asio/spawn.hpp>
 #include <boost/utility/string_view.hpp>
+#include <cstdlib>
+#include <ctime>
+#include <iomanip>
+#include <list>
+#include <sstream>
 
 #ifdef __EXPERIMENTAL__
 #include <bittorrent/bep3_tracker.h>
@@ -33,331 +33,318 @@ using Clock = chrono::steady_clock;
 // Entry
 
 struct Entry {
-    string key;
-    bt::NodeID infohash;
+  string key;
+  bt::NodeID infohash;
 
-    Clock::time_point successful_update;
-    Clock::time_point failed_update;
+  Clock::time_point successful_update;
+  Clock::time_point failed_update;
 
-    bool to_remove = false;
+  bool to_remove = false;
 
-    Entry() = default;
+  Entry() = default;
 
-    Entry(Announcer::Key key)
-        : key(std::move(key))
-        , infohash(util::sha1_digest(this->key))
-    { }
+  Entry(Announcer::Key key)
+      : key(std::move(key)), infohash(util::sha1_digest(this->key)) {}
 
-    bool attempted_update() const {
-        return successful_update != Clock::time_point()
-            || failed_update     != Clock::time_point();
-    }
+  bool attempted_update() const {
+    return successful_update != Clock::time_point() ||
+           failed_update != Clock::time_point();
+  }
 };
 
 //--------------------------------------------------------------------
 // Base Loop
 struct Announcer::Loop {
-    using Entries = util::AsyncQueue<Entry, std::list>;
+  using Entries = util::AsyncQueue<Entry, std::list>;
 
-    AsioExecutor ex;
-    Entries entries;
-    size_t _simultaneous_announcements;
-    Cancel _cancel;
-    Cancel _timer_cancel;
-    Trace _trace;
+  AsioExecutor ex;
+  Entries entries;
+  size_t _simultaneous_announcements;
+  Cancel _cancel;
+  Cancel _timer_cancel;
+  Trace _trace;
 
-    static Clock::duration success_reannounce_period() { return 20min; }
-    static Clock::duration failure_reannounce_period() { return 5min;  }
+  static Clock::duration success_reannounce_period() { return 20min; }
+  static Clock::duration failure_reannounce_period() { return 5min; }
 
-    Loop(AsioExecutor ex, size_t simultaneous_announcements, Trace trace)
-        : ex(ex)
-        , entries(ex)
-        , _simultaneous_announcements(simultaneous_announcements)
-        , _trace(std::move(trace))
-    { }
+  Loop(AsioExecutor ex, size_t simultaneous_announcements, Trace trace)
+      : ex(ex), entries(ex),
+        _simultaneous_announcements(simultaneous_announcements),
+        _trace(std::move(trace)) {}
 
-    inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
+  inline static bool debug() { return get_logger().get_threshold() <= DEBUG; }
 
-    Entries::iterator find_entry_by_key(const Key& key) {
-        for (auto i = entries.begin(); i != entries.end(); ++i) {
-            if (i->first.key == key) return i;
-        }
-        return entries.end();
+  Entries::iterator find_entry_by_key(const Key &key) {
+    for (auto i = entries.begin(); i != entries.end(); ++i) {
+      if (i->first.key == key)
+        return i;
+    }
+    return entries.end();
+  }
+
+  bool add(Key key) {
+    auto entry_i = find_entry_by_key(key);
+    bool already_has_key = (entry_i != entries.end());
+
+    if (already_has_key) {
+      LOG_DEBUG(_trace, " Adding ", key, " (already exists)");
+      entry_i->first.to_remove = false;
+    } else {
+      LOG_DEBUG(_trace, " Adding ", key);
     }
 
-    bool add(Key key) {
-        auto entry_i = find_entry_by_key(key);
-        bool already_has_key = (entry_i != entries.end());
+    if (already_has_key)
+      return false;
 
-        if (already_has_key) {
-            LOG_DEBUG(_trace, " Adding ", key, " (already exists)");
-            entry_i->first.to_remove = false;
-        } else {
-            LOG_DEBUG(_trace, " Adding ", key);
-        }
+    // To preserve the order in which entries are added and updated we put
+    // this new entry _after_ all entries that have not yet been updated.
+    Entries::iterator i = entries.begin();
 
-        if (already_has_key) return false;
-
-        // To preserve the order in which entries are added and updated we put
-        // this new entry _after_ all entries that have not yet been updated.
-        Entries::iterator i = entries.begin();
-
-        for (; i != entries.end(); ++i) {
-            const auto& e = i->first;
-            if (e.attempted_update()) break;
-        }
-
-        entries.insert(i, Entry(std::move(key)));
-        _timer_cancel();
-        _timer_cancel = Cancel();
-        return true;
+    for (; i != entries.end(); ++i) {
+      const auto &e = i->first;
+      if (e.attempted_update())
+        break;
     }
 
-    bool remove(const Key& key) {
-        Entries::iterator i = entries.begin();
+    entries.insert(i, Entry(std::move(key)));
+    _timer_cancel();
+    _timer_cancel = Cancel();
+    return true;
+  }
 
-        for (; i != entries.end(); ++i)
-            if (i->first.key == key) break;  // found
-        if (i == entries.end()) return false;  // not found
+  bool remove(const Key &key) {
+    Entries::iterator i = entries.begin();
 
-        LOG_DEBUG(_trace, " Marking ", key, " for removal");
-        // The actual removal is not done here but in the main loop.
-        i->first.to_remove = true;
-        // No new entries, so no `_timer_cancel` reset.
-        return true;
+    for (; i != entries.end(); ++i)
+      if (i->first.key == key)
+        break; // found
+    if (i == entries.end())
+      return false; // not found
+
+    LOG_DEBUG(_trace, " Marking ", key, " for removal");
+    // The actual removal is not done here but in the main loop.
+    i->first.to_remove = true;
+    // No new entries, so no `_timer_cancel` reset.
+    return true;
+  }
+
+  Clock::duration next_update_after(const Entry &e) const {
+    if (e.successful_update == Clock::time_point() &&
+        e.failed_update == Clock::time_point()) {
+      return 0s;
     }
 
-    Clock::duration next_update_after(const Entry& e) const
-    {
-        if (e.successful_update == Clock::time_point()
-             && e.failed_update == Clock::time_point()) {
-            return 0s;
-        }
+    auto now = Clock::now();
 
-        auto now = Clock::now();
-
-        if (e.successful_update >= e.failed_update) {
-            auto p = success_reannounce_period();
-            if (e.successful_update + p <= now) return 0s;
-            return e.successful_update + p - now;
-        }
-        else {
-            auto p = failure_reannounce_period();
-            if (e.failed_update + p < now) return 0s;
-            return e.failed_update + p - now;
-        }
+    if (e.successful_update >= e.failed_update) {
+      auto p = success_reannounce_period();
+      if (e.successful_update + p <= now)
+        return 0s;
+      return e.successful_update + p - now;
+    } else {
+      auto p = failure_reannounce_period();
+      if (e.failed_update + p < now)
+        return 0s;
+      return e.failed_update + p - now;
     }
+  }
 
-    void print_entries() const {
-        auto now = Clock::now();
-        ostringstream ss;
-        auto print = [&] (Clock::time_point t) {
-            if (t == Clock::time_point()) {
-                ss << "--:--:--";
-            }
-            else {
-                // TODO: For the purpose of analyzing logs, it would be better
-                // to print absolute times.
-                using namespace std::chrono;
-                unsigned secs = duration_cast<milliseconds>(now - t).count() / 1000.f;
-                unsigned hrs  = secs / (60*60);
-                secs -= hrs * 60*60;
-                unsigned mins = secs / 60;
-                secs -= mins * 60;
+  void print_entries() const {
+    auto now = Clock::now();
+    ostringstream ss;
+    auto print = [&](Clock::time_point t) {
+      if (t == Clock::time_point()) {
+        ss << "--:--:--";
+      } else {
+        // TODO: For the purpose of analyzing logs, it would be better
+        // to print absolute times.
+        using namespace std::chrono;
+        unsigned secs = duration_cast<milliseconds>(now - t).count() / 1000.f;
+        unsigned hrs = secs / (60 * 60);
+        secs -= hrs * 60 * 60;
+        unsigned mins = secs / 60;
+        secs -= mins * 60;
 
-                ss << std::setfill('0') << std::setw(2) << hrs;
-                ss << ':';
-                ss << std::setfill('0') << std::setw(2) << mins;
-                ss << ':';
-                ss << std::setfill('0') << std::setw(2) << secs;
-            }
-            ss << " ago";
-        };
+        ss << std::setfill('0') << std::setw(2) << hrs;
+        ss << ':';
+        ss << std::setfill('0') << std::setw(2) << mins;
+        ss << ':';
+        ss << std::setfill('0') << std::setw(2) << secs;
+      }
+      ss << " ago";
+    };
 
-        LOG_DEBUG(_trace, " Entries:");
-        for (auto& ep : entries) {
-            auto& e = ep.first;
-            ss << " " << e.infohash << " | successful_update=";
-            print(e.successful_update);
-            ss << " | failed_update=";
-            print(e.failed_update);
-            ss << " | key=" << e.key;
+    LOG_DEBUG(_trace, " Entries:");
+    for (auto &ep : entries) {
+      auto &e = ep.first;
+      ss << " " << e.infohash << " | successful_update=";
+      print(e.successful_update);
+      ss << " | failed_update=";
+      print(e.failed_update);
+      ss << " | key=" << e.key;
 
-            LOG_DEBUG(_trace, " ", ss.str());
-            ss.str({});
-        }
+      LOG_DEBUG(_trace, " ", ss.str());
+      ss.str({});
     }
+  }
 
-    std::expected<Entries::iterator, sys::error_code> pick_entry(Async yield)
-    {
-        while (true) {
-            if (entries.empty()) {
-                LOG_DEBUG(yield, " No entries to update, waiting...");
+  std::expected<Entries::iterator, sys::error_code> pick_entry(Async yield) {
+    while (true) {
+      if (entries.empty()) {
+        LOG_DEBUG(yield, " No entries to update, waiting...");
 
-                auto result = entries.async_wait_for_push(yield);
+        auto result = entries.async_wait_for_push(yield);
 
-                if (!result) {
-                    return std::unexpected(result.error());
-                }
-
-                continue;
-            }
-
-            assert(!entries.empty());
-
-            auto i = entries.begin();
-
-            auto d = next_update_after(i->first);
-
-            LOG_DEBUG( yield, " Found entry to update. It'll be updated in "
-                            , chrono::duration_cast<chrono::seconds>(d).count()
-                            , " seconds: ", i->first.key);
-
-            if (d == 0s) return i;
-
-            auto cc = yield.cancel_slot([&] { _timer_cancel(); });
-            async_sleep(d, yield);
+        if (!result) {
+          return std::unexpected(result.error());
         }
-    }
 
-    void start()
-    {
-        spawn_detached(ex, _cancel, _trace, [this] (Async yield) {
-            loop(yield);
+        continue;
+      }
+
+      assert(!entries.empty());
+
+      auto i = entries.begin();
+
+      auto d = next_update_after(i->first);
+
+      LOG_DEBUG(yield, " Found entry to update. It'll be updated in ",
+                chrono::duration_cast<chrono::seconds>(d).count(),
+                " seconds: ", i->first.key);
+
+      if (d == 0s)
+        return i;
+
+      auto cc = yield.cancel_slot([&] { _timer_cancel(); });
+      async_sleep(d, yield);
+    }
+  }
+
+  void start() {
+    spawn_detached(ex, _cancel, _trace, [this](Async yield) { loop(yield); });
+  }
+
+  void loop(Async yield) {
+    auto on_exit =
+        defer([trace = yield.trace(), cancel = Cancel(yield.get_cancel())] {
+          LOG_DEBUG(trace,
+                    " Exiting the loop; cancel=", (cancel ? "true" : "false"));
         });
-    }
 
-    void loop(Async yield)
-    {
-        auto on_exit = defer([trace = yield.trace(), cancel = Cancel(yield.get_cancel())] {
-            LOG_DEBUG(trace, " Exiting the loop; cancel=", (cancel ? "true":"false"));
-        });
+    WaitCondition wc(ex);
 
-        WaitCondition wc(ex);
+    while (true) {
+      for (size_t n = 0; n < _simultaneous_announcements; ++n) {
+        LOG_DEBUG(yield, " Picking entry to update (", (n + 1), "/",
+                  _simultaneous_announcements, ")");
+        auto ei = pick_entry(yield);
+        assert(ei);
 
-        while (true) {
-            for (size_t n = 0; n < _simultaneous_announcements; ++n) {
-                LOG_DEBUG(yield, " Picking entry to update (", (n + 1), "/", _simultaneous_announcements, ")");
-                auto ei = pick_entry(yield);
-                assert(ei);
+        if ((**ei).first.to_remove) {
+          // Marked for removal, drop the entry and get another one.
+          entries.erase(*ei);
+          continue;
+        }
 
-                if ((**ei).first.to_remove) {
-                    // Marked for removal, drop the entry and get another one.
-                    entries.erase(*ei);
-                    continue;
-                }
+        yield.spawn([this, lock = wc.lock()](Async yield) {
+          // Try inserting three times before moving to the next entry
+          bool success = false;
 
-                yield.spawn([this, lock = wc.lock()] (Async yield) {
-                    // Try inserting three times before moving to the next entry
-                    bool success = false;
-
-                    Entry e = std::move(entries.begin()->first);
-                    for (int i = 0; i != 3; ++i) {
-                        auto result = announce(e, yield);
-                        if (result) {
-                            success = true;
-                            break;
-                        }
-
-                        async_sleep(chrono::seconds(1+i), yield);
-                    }
-
-                    if (success) {
-                        e.failed_update     = {};
-                        e.successful_update = Clock::now();
-                    } else  {
-                        e.failed_update     = Clock::now();
-                    }
-
-                    if (!e.to_remove) entries.push_back(std::move(e));
-                    if (debug()) { print_entries(); }
-                });
-
-                entries.erase(*ei);
+          Entry e = std::move(entries.begin()->first);
+          for (int i = 0; i != 3; ++i) {
+            auto result = announce(e, yield);
+            if (result) {
+              success = true;
+              break;
             }
 
-            std::ignore = wc.wait(yield);
-        }
+            async_sleep(chrono::seconds(1 + i), yield);
+          }
+
+          if (success) {
+            e.failed_update = {};
+            e.successful_update = Clock::now();
+          } else {
+            e.failed_update = Clock::now();
+          }
+
+          if (!e.to_remove)
+            entries.push_back(std::move(e));
+          if (debug()) {
+            print_entries();
+          }
+        });
+
+        entries.erase(*ei);
+      }
+
+      std::ignore = wc.wait(yield);
     }
+  }
 
-    // Virtual announce method - to be overridden by children
-    virtual std::expected<void, sys::error_code>
-    announce(Entry& e, Async yield) = 0;
+  // Virtual announce method - to be overridden by children
+  virtual std::expected<void, sys::error_code> announce(Entry &e,
+                                                        Async yield) = 0;
 
-    virtual ~Loop() { _cancel(); }
+  virtual ~Loop() { _cancel(); }
 };
 
 //--------------------------------------------------------------------
 // Bep5Loop - announces to DHT
 struct Bep5Loop : public Announcer::Loop {
-    shared_ptr<bt::DhtBase> dht;
+  shared_ptr<bt::DhtBase> dht;
 
-    Bep5Loop(
-        shared_ptr<bt::DhtBase> dht,
-        size_t simultaneous_announcements,
-        Trace trace
-    )
-        : Loop(dht->get_executor(), simultaneous_announcements, std::move(trace))
-        , dht(std::move(dht))
-    { }
+  Bep5Loop(shared_ptr<bt::DhtBase> dht, size_t simultaneous_announcements,
+           Trace trace)
+      : Loop(dht->get_executor(), simultaneous_announcements, std::move(trace)),
+        dht(std::move(dht)) {}
 
-    void start()
-    {
-        spawn_detached(ex, _cancel, _trace, [this] (Async yield) {
-            // Wait for DHT to be ready before starting the loop
-            LOG_DEBUG(yield, " Waiting for DHT");
-            dht->wait_all_ready(yield);
+  void start() {
+    spawn_detached(ex, _cancel, _trace, [this](Async yield) {
+      // Wait for DHT to be ready before starting the loop
+      LOG_DEBUG(yield, " Waiting for DHT");
+      dht->wait_all_ready(yield);
 
-            loop(yield);
-        });
+      loop(yield);
+    });
+  }
+
+  std::expected<void, sys::error_code> announce(Entry &e,
+                                                Async yield) override {
+    LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key, "...");
+
+    auto endpoints = dht->tracker_announce(e.infohash, std::nullopt, yield);
+
+    LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key,
+              ": done; result=", ouinet::debug(endpoints));
+
+    if (!endpoints) {
+      return std::unexpected(endpoints.error());
     }
 
-    std::expected<void, sys::error_code> announce(Entry& e, Async yield) override
-    {
-        LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key, "...");
-
-        auto endpoints = dht->tracker_announce(e.infohash, std::nullopt, yield);
-
-        LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key
-                           , ": done; result=", ouinet::debug(endpoints));
-
-        if (!endpoints) {
-            return std::unexpected(endpoints.error());
-        }
-
-        return {};
-    }
+    return {};
+  }
 };
 
 //--------------------------------------------------------------------
 // Base Announcer
 Announcer::Announcer(AsioExecutor ex, size_t simultaneous_announcements)
-    : _loop(nullptr)
-{
-}
+    : _loop(nullptr) {}
 
-bool Announcer::add(Key key)
-{
-    return _loop->add(std::move(key));
-}
+bool Announcer::add(Key key) { return _loop->add(std::move(key)); }
 
-bool Announcer::remove(const Key& key) {
-    return _loop->remove(key);
-}
+bool Announcer::remove(const Key &key) { return _loop->remove(key); }
 
 Announcer::~Announcer() {}
 
 //--------------------------------------------------------------------
 // Bep5Announcer
-Bep5Announcer::Bep5Announcer(
-    std::shared_ptr<bittorrent::DhtBase> dht,
-    size_t simultaneous_announcements,
-    Trace trace
-)
-    : Announcer(dht->get_executor(), simultaneous_announcements)
-{
-    _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements, std::move(trace));
-    static_cast<Bep5Loop*>(_loop.get())->start();
+Bep5Announcer::Bep5Announcer(std::shared_ptr<bittorrent::DhtBase> dht,
+                             size_t simultaneous_announcements, Trace trace)
+    : Announcer(dht->get_executor(), simultaneous_announcements) {
+  _loop = make_unique<Bep5Loop>(std::move(dht), simultaneous_announcements,
+                                std::move(trace));
+  static_cast<Bep5Loop *>(_loop.get())->start();
 }
 
 Bep5Announcer::~Bep5Announcer() {}

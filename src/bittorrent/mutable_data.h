@@ -17,83 +17,79 @@ class Cancel;
 namespace bittorrent {
 
 struct OUINET_COMMON_API MutableDataItem {
-    sign::PublicKey public_key;
-    std::string salt;
-    BencodedValue value;
-    int64_t sequence_number;
-    sign::Signature signature;
+  sign::PublicKey public_key;
+  std::string salt;
+  BencodedValue value;
+  int64_t sequence_number;
+  sign::Signature signature;
 
-    // Throws `std::length_error` if the value is too big.
-    static MutableDataItem sign(
-        BencodedValue value,
-        int64_t sequence_number,
-        boost::string_view salt,
-        sign::SecretKey private_key
-    );
+  // Throws `std::length_error` if the value is too big.
+  static MutableDataItem sign(BencodedValue value, int64_t sequence_number,
+                              boost::string_view salt,
+                              sign::SecretKey private_key);
 
-    bool verify() const;
+  bool verify() const;
 
-    std::string bencode() const {
-        using namespace std;
+  std::string bencode() const {
+    using namespace std;
 
-        auto pk = public_key.to_bytes();
+    auto pk = public_key.to_bytes();
 
-        return bencoding_encode(BencodedMap{
-            // cas is not compulsory
-            // id depends on the publishing node
-            { "k"   , string(begin(pk), end(pk)) },
-            { "salt", salt },
-            { "seq" , sequence_number },
-            // token depends on the insertion
-            { "sig" , string(begin(signature.bytes), end(signature.bytes)) },
-            { "v"   , value }
-        });
+    return bencoding_encode(BencodedMap{
+        // cas is not compulsory
+        // id depends on the publishing node
+        {"k", string(begin(pk), end(pk))},
+        {"salt", salt},
+        {"seq", sequence_number},
+        // token depends on the insertion
+        {"sig", string(begin(signature.bytes), end(signature.bytes))},
+        {"v", value}});
+  }
+
+  static boost::optional<MutableDataItem> bdecode(boost::string_view s) {
+    using namespace std;
+
+    // TODO: bencoding_decode should accept string_view
+    auto ins = bencoding_decode(s);
+
+    if (!ins || !ins->is_map()) { // general format and type of data
+      return boost::none;
     }
 
-    static
-    boost::optional<MutableDataItem> bdecode(boost::string_view s) {
-        using namespace std;
+    MutableDataItem item;
 
-        // TODO: bencoding_decode should accept string_view
-        auto ins = bencoding_decode(s);
+    try { // individual fields for mutable data item
+      auto ins_map = ins->as_map();
+      auto k = ins_map->at("k").as_string().value();
 
-        if (!ins || !ins->is_map()) {  // general format and type of data
-            return boost::none;
-        }
+      if (k.size() != sign::PublicKey::size)
+        return boost::none;
 
-        MutableDataItem item;
+      sign::PublicKey::Bytes ka;
+      copy(begin(k), end(k), begin(ka));
 
-        try {  // individual fields for mutable data item
-            auto ins_map = ins->as_map();
-            auto k = ins_map->at("k").as_string().value();
+      item.public_key = std::move(ka);
+      item.salt = ins_map->at("salt").as_string().value();
+      item.value = ins_map->at("v");
+      item.sequence_number = ins_map->at("seq").as_int().value();
 
-            if (k.size() != sign::PublicKey::size) return boost::none;
+      auto sig = ins_map->at("sig").as_string().value();
 
-            sign::PublicKey::Bytes ka;
-            copy(begin(k), end(k), begin(ka));
+      if (sig.size() != item.signature.bytes.size())
+        return boost::none;
 
-            item.public_key      = std::move(ka);
-            item.salt            = ins_map->at("salt").as_string().value();
-            item.value           = ins_map->at("v");
-            item.sequence_number = ins_map->at("seq").as_int().value();
-
-            auto sig = ins_map->at("sig").as_string().value();
-
-            if (sig.size() != item.signature.bytes.size()) return boost::none;
-
-            copy(begin(sig), end(sig), begin(item.signature.bytes));
-        }
-        catch (const exception&) {
-            return boost::none;
-        }
-
-        if (!item.verify()) {  // mutable data item signature
-            return boost::none;
-        }
-
-        return item;
+      copy(begin(sig), end(sig), begin(item.signature.bytes));
+    } catch (const exception &) {
+      return boost::none;
     }
+
+    if (!item.verify()) { // mutable data item signature
+      return boost::none;
+    }
+
+    return item;
+  }
 };
 
-} // bittorrent namespace
-} // ouinet namespace
+} // namespace bittorrent
+} // namespace ouinet

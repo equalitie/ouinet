@@ -2,29 +2,32 @@
 
 #include "temp_file.h"
 
-namespace ouinet { namespace util {
+namespace ouinet {
+namespace util {
 
 void temp_file::close() {
-    // Not completely idempotent:
-    // one can set "keep on close" then close and the file remains,
-    // then unset "keep on close" then close again and the file is removed.
-    _file.close();
-    if (!_keep_on_close)
-        std::ignore = file_io::remove_file(_path);
+  // Not completely idempotent:
+  // one can set "keep on close" then close and the file remains,
+  // then unset "keep on close" then close again and the file is removed.
+  _file.close();
+  if (!_keep_on_close)
+    std::ignore = file_io::remove_file(_path);
 }
 
 std::expected<temp_file, sys::error_code>
-temp_file::make( const AsioExecutor& ex
-               , const fs::path& dir, const fs::path& model)
-{
-    sys::error_code ec;
-    auto path = dir / fs::unique_path(model, ec);
-    if (ec) return std::unexpected(ec);
+temp_file::make(const AsioExecutor &ex, const fs::path &dir,
+                const fs::path &model) {
+  sys::error_code ec;
+  auto path = dir / fs::unique_path(model, ec);
+  if (ec)
+    return std::unexpected(ec);
 
-    auto file = file_io::open_or_create(ex, path);
-    if (!file) return std::unexpected(file.error());
+  auto file = file_io::open_or_create(ex, path);
+  if (!file)
+    return std::unexpected(file.error());
 
-    return temp_file(std::move(*file), std::move(path));
+  return temp_file(std::move(*file), std::move(path));
 }
 
-}} // namespaces
+} // namespace util
+} // namespace ouinet

@@ -1,9 +1,9 @@
 #include "hash_list.h"
-#include "http_sign.h"
 #include "chain_hasher.h"
+#include "http_sign.h"
+#include "logger.h"
 #include "parse/number.h"
 #include "util/compat.h"
-#include "logger.h"
 #include <expected>
 
 using namespace std;
@@ -16,250 +16,250 @@ using namespace ouinet::cache;
 static const size_t MAX_LINE_SIZE_BYTES = 512;
 
 static const std::string MAGIC = "OUINET_HASH_LIST_V1";
-static const char* ORIGINAL_STATUS = "X-Ouinet-Original-Status";
+static const char *ORIGINAL_STATUS = "X-Ouinet-Original-Status";
 
 using Digest = util::SHA512::digest_type;
 
 bool HashList::verify() const {
-    size_t block_size = signed_head.block_size();
+  size_t block_size = signed_head.block_size();
 
-    ChainHasher chain_hasher;
+  ChainHasher chain_hasher;
 
-    // Even responses with empty body have at least one block hash
-    if (blocks.empty()) return false;
+  // Even responses with empty body have at least one block hash
+  if (blocks.empty())
+    return false;
 
-    ChainHash chain_hash;
+  ChainHash chain_hash;
 
-    for (auto& block : blocks) {
-        chain_hash = chain_hasher.calculate_block(
-                block_size, block.data_hash, sign::Signature(block.chained_hash_signature));
-    }
+  for (auto &block : blocks) {
+    chain_hash = chain_hasher.calculate_block(
+        block_size, block.data_hash,
+        sign::Signature(block.chained_hash_signature));
+  }
 
-    return chain_hash.verify( signed_head.public_key()
-                            , signed_head.injection_id());
+  return chain_hash.verify(signed_head.public_key(),
+                           signed_head.injection_id());
 }
 
 struct Parser {
-    using Data = std::vector<uint8_t>;
+  using Data = std::vector<uint8_t>;
 
-    Data buffer;
+  Data buffer;
 
-    void append_data(const Data& data) {
-        buffer.insert(buffer.end(), data.begin(), data.end());
+  void append_data(const Data &data) {
+    buffer.insert(buffer.end(), data.begin(), data.end());
+  }
+
+  // Returns a line of data (optionally)
+  boost::optional<string> read_line() {
+    auto nl_i = find_nl(buffer);
+
+    if (nl_i == buffer.end()) {
+      return boost::none;
     }
 
-    // Returns a line of data (optionally)
-    boost::optional<string> read_line() {
-        auto nl_i = find_nl(buffer);
+    string ret(buffer.begin(), nl_i);
+    buffer.erase(buffer.begin(), std::next(nl_i));
 
-        if (nl_i == buffer.end()) {
-            return boost::none;
-        }
+    return ret;
+  }
 
-        string ret(buffer.begin(), nl_i);
-        buffer.erase(buffer.begin(), std::next(nl_i));
+  boost::optional<sign::Signature::Bytes> read_signature() {
+    return read_array<sign::Signature::size>();
+  }
 
-        return ret;
-    }
+  boost::optional<Digest> read_hash() {
+    return read_array<util::SHA512::size()>();
+  }
 
-    boost::optional<sign::Signature::Bytes>
-    read_signature() {
-        return read_array<sign::Signature::size>();
-    }
+  template <size_t N> boost::optional<std::array<uint8_t, N>> read_array() {
+    if (buffer.size() < N)
+      return boost::none;
+    auto b = buffer.begin();
+    auto e = b + N;
+    std::array<uint8_t, N> ret;
+    std::copy(b, e, ret.begin());
+    buffer.erase(b, e);
+    return ret;
+  }
 
-    boost::optional<Digest>
-    read_hash() {
-        return read_array<util::SHA512::size()>();
-    }
-
-    template<size_t N>
-    boost::optional<std::array<uint8_t, N>> read_array() {
-        if (buffer.size() < N) return boost::none;
-        auto b = buffer.begin();
-        auto e = b + N;
-        std::array<uint8_t, N> ret;
-        std::copy(b, e, ret.begin());
-        buffer.erase(b, e);
-        return ret;
-    }
-
-    Data::iterator find_nl(Data& data) const {
-        return std::find(data.begin(), data.end(), '\n');
-    }
+  Data::iterator find_nl(Data &data) const {
+    return std::find(data.begin(), data.end(), '\n');
+  }
 };
 
 /* static */
-std::expected<HashList, sys::error_code> HashList::load(
-    http_response::Reader& r,
-    const PubKey& pk,
-    Async yield)
-{
-    using namespace std::chrono_literals;
-    static const auto bad_msg = sys::errc::make_error_code(sys::errc::bad_message);
+std::expected<HashList, sys::error_code>
+HashList::load(http_response::Reader &r, const PubKey &pk, Async yield) {
+  using namespace std::chrono_literals;
+  static const auto bad_msg =
+      sys::errc::make_error_code(sys::errc::bad_message);
 
-    auto part_e = r.timed_async_read_part(5s, yield);
+  auto part_e = r.timed_async_read_part(5s, yield);
+  if (!part_e) {
+    return std::unexpected(part_e.error());
+  }
+  auto part = std::move(*part_e);
+  if (!part) {
+    assert(0);
+    return std::unexpected(sys::errc::make_error_code(sys::errc::bad_message));
+  }
+
+  if (!part->is_head()) {
+    return std::unexpected(bad_msg);
+  }
+
+  auto raw_head = std::move(*part->as_head());
+
+  if (raw_head.result() == http::status::not_found) {
+    return std::unexpected(asio::error::not_found);
+  }
+
+  auto orig_status_sv = raw_head[ORIGINAL_STATUS];
+  auto orig_status = parse::number<unsigned>(orig_status_sv);
+  raw_head.erase(ORIGINAL_STATUS);
+
+  if (!orig_status) {
+    return std::unexpected(bad_msg);
+  }
+
+  raw_head.result(*orig_status);
+
+  auto head_o = SignedHead::verify_and_create(std::move(raw_head), pk);
+
+  if (!head_o) {
+    return std::unexpected(bad_msg);
+  }
+
+  head_o->erase(http::field::content_length);
+  head_o->set(http::field::transfer_encoding, "chunked");
+
+  Parser parser;
+
+  using Signature = sign::Signature::Bytes;
+
+  bool magic_checked = false;
+
+  boost::optional<Digest> digest;
+  boost::optional<Signature> signature;
+
+  std::vector<Block> blocks;
+
+  while (true) {
+    part_e = r.timed_async_read_part(5s, yield);
     if (!part_e) {
-        return std::unexpected(part_e.error());
+      return std::unexpected(part_e.error());
     }
-    auto part = std::move(*part_e);
+    part = std::move(*part_e);
     if (!part) {
-        assert(0);
-        return std::unexpected(sys::errc::make_error_code(sys::errc::bad_message));
+      break;
     }
 
-    if (!part->is_head()) {
-        return std::unexpected(bad_msg);
+    if (part->is_body()) {
+      parser.append_data(*part->as_body());
+    } else if (part->is_chunk_body()) {
+      parser.append_data(*part->as_chunk_body());
+    } else {
+      continue;
     }
-
-    auto raw_head = std::move(*part->as_head());
-
-    if (raw_head.result() == http::status::not_found) {
-        return std::unexpected(asio::error::not_found);
-    }
-
-    auto orig_status_sv = raw_head[ORIGINAL_STATUS];
-    auto orig_status = parse::number<unsigned>(orig_status_sv);
-    raw_head.erase(ORIGINAL_STATUS);
-
-    if (!orig_status) {
-        return std::unexpected(bad_msg);
-    }
-
-    raw_head.result(*orig_status);
-
-    auto head_o = SignedHead::verify_and_create(std::move(raw_head), pk);
-
-    if (!head_o) {
-        return std::unexpected(bad_msg);
-    }
-
-    head_o->erase(http::field::content_length);
-    head_o->set(http::field::transfer_encoding, "chunked");
-
-    Parser parser;
-
-    using Signature = sign::Signature::Bytes;
-
-    bool magic_checked = false;
-
-    boost::optional<Digest> digest;
-    boost::optional<Signature> signature;
-
-    std::vector<Block> blocks;
 
     while (true) {
-        part_e = r.timed_async_read_part(5s, yield);
-        if (!part_e) {
-            return std::unexpected(part_e.error());
-        }
-        part = std::move(*part_e);
-        if (!part) {
-            break;
-        }
+      bool progress = false;
 
-        if (part->is_body()) {
-            parser.append_data(*part->as_body());
-        } else if (part->is_chunk_body()) {
-            parser.append_data(*part->as_chunk_body());
+      if (!magic_checked) {
+        auto magic_line = parser.read_line();
+        if (magic_line) {
+          if (*magic_line != MAGIC) {
+            return std::unexpected(bad_msg);
+          }
+          magic_checked = true;
+          progress = true;
+        }
+      } else {
+        if (!digest) {
+          digest = parser.read_hash();
+          if (digest)
+            progress = true;
         } else {
-            continue;
+          assert(!signature);
+          signature = parser.read_signature();
+
+          if (signature) {
+            progress = true;
+
+            blocks.push_back({*digest, {*signature}});
+
+            digest = boost::none;
+            signature = boost::none;
+          }
         }
+      }
 
-        while (true) {
-            bool progress = false;
-
-            if (!magic_checked) {
-                auto magic_line = parser.read_line();
-                if (magic_line) {
-                    if (*magic_line != MAGIC) {
-                        return std::unexpected(bad_msg);
-                    }
-                    magic_checked = true;
-                    progress = true;
-                }
-            } else {
-                if (!digest) {
-                    digest = parser.read_hash();
-                    if (digest) progress = true;
-                } else {
-                    assert(!signature);
-                    signature = parser.read_signature();
-
-                    if (signature) {
-                        progress = true;
-
-                        blocks.push_back({*digest, { *signature }});
-
-                        digest    = boost::none;
-                        signature = boost::none;
-                    }
-                }
-            }
-
-            if (!progress) {
-                if (parser.buffer.size() > MAX_LINE_SIZE_BYTES) {
-                    LOG_WARN(yield, "Line too long");
-                    return std::unexpected(bad_msg);
-                }
-                break;
-            }
+      if (!progress) {
+        if (parser.buffer.size() > MAX_LINE_SIZE_BYTES) {
+          LOG_WARN(yield, "Line too long");
+          return std::unexpected(bad_msg);
         }
+        break;
+      }
     }
+  }
 
-    if (blocks.empty()) {
-        return std::unexpected(bad_msg);
-    }
+  if (blocks.empty()) {
+    return std::unexpected(bad_msg);
+  }
 
-    HashList hs{std::move(*head_o), std::move(blocks)};
+  HashList hs{std::move(*head_o), std::move(blocks)};
 
-    if (!hs.verify()) {
-        return std::unexpected(bad_msg);
-    }
+  if (!hs.verify()) {
+    return std::unexpected(bad_msg);
+  }
 
-    return hs;
+  return hs;
 }
 
-std::expected<void, sys::error_code>
-HashList::write(GenericStream& con, Async y) const
-{
-    using namespace chrono_literals;
+std::expected<void, sys::error_code> HashList::write(GenericStream &con,
+                                                     Async y) const {
+  using namespace chrono_literals;
 
-    assert(verify());
+  assert(verify());
 
-    auto h = signed_head;
+  auto h = signed_head;
 
-    size_t content_length =
-        MAGIC.size() + strlen("\n") +
-        blocks.size() * (sign::Signature::size + util::SHA512::size());
+  size_t content_length =
+      MAGIC.size() + strlen("\n") +
+      blocks.size() * (sign::Signature::size + util::SHA512::size());
 
-    h.set(ORIGINAL_STATUS, util::str(h.result_int()));
-    h.result(http::status::ok);
-    h.set(http::field::content_length, to_string(content_length));
+  h.set(ORIGINAL_STATUS, util::str(h.result_int()));
+  h.result(http::status::ok);
+  h.set(http::field::content_length, to_string(content_length));
 
-    std::vector<asio::const_buffer> bufs;
-    bufs.reserve(2 /* 2 = MAGIC + "\n" */ + blocks.size() * 2 /* 2 = signature + digest */);
+  std::vector<asio::const_buffer> bufs;
+  bufs.reserve(2 /* 2 = MAGIC + "\n" */ +
+               blocks.size() * 2 /* 2 = signature + digest */);
 
-    bufs.push_back(asio::buffer(MAGIC));
-    bufs.push_back(asio::buffer("\n", 1));
+  bufs.push_back(asio::buffer(MAGIC));
+  bufs.push_back(asio::buffer("\n", 1));
 
-    for (auto& block : blocks) {
-        bufs.push_back(asio::buffer(block.data_hash));
-        bufs.push_back(asio::buffer(block.chained_hash_signature.bytes));
-    }
+  for (auto &block : blocks) {
+    bufs.push_back(asio::buffer(block.data_hash));
+    bufs.push_back(asio::buffer(block.chained_hash_signature.bytes));
+  }
 
-    auto wd = watch_dog(con.get_executor(),
-            5s + 100ms * blocks.size(),
-            [&] { con.close(); });
+  auto wd = watch_dog(con.get_executor(), 5s + 100ms * blocks.size(),
+                      [&] { con.close(); });
 
-    if (auto r = h.async_write(con, y); !r) {
-        if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
-        return std::unexpected(r.error());
-    }
+  if (auto r = h.async_write(con, y); !r) {
+    if (!wd.is_running())
+      return std::unexpected(asio::error::timed_out);
+    return std::unexpected(r.error());
+  }
 
-    if (auto r = asio::async_write(con, bufs, y); !r) {
-        if (!wd.is_running()) return std::unexpected(asio::error::timed_out);
-        return std::unexpected(r.error());
-    }
+  if (auto r = asio::async_write(con, bufs, y); !r) {
+    if (!wd.is_running())
+      return std::unexpected(asio::error::timed_out);
+    return std::unexpected(r.error());
+  }
 
-    return {};
+  return {};
 }

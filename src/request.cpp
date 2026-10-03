@@ -1,195 +1,197 @@
 #include "request.h"
-#include "http_util.h"
 #include "authenticate.h"
 #include "cache/resource_key.h"
-#include "util/overloaded.h"
+#include "http_util.h"
 #include "logger.h"
+#include "util/overloaded.h"
 
 namespace ouinet {
 
-static boost::optional<std::string> extract_dht_group(http::request_header<>& hdr) {
-    boost::optional<std::string> dht_group;
+static boost::optional<std::string>
+extract_dht_group(http::request_header<> &hdr) {
+  boost::optional<std::string> dht_group;
 
 #if defined(__APPLE__) && PLATFORM != MAC_ARM64
-    std::string from_url(const std::string& url) {
-        auto dhtgroup = std::move(url);
+  std::string from_url(const std::string &url) {
+    auto dhtgroup = std::move(url);
 
-        boost::regex scheme("^[a-z][-+.0-9a-z]*://");
-        dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
-        boost::regex trailing_slashes("/+$");
-        dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
-        boost::regex leading_www("^www.");
-        dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
+    boost::regex scheme("^[a-z][-+.0-9a-z]*://");
+    dhtgroup = boost::regex_replace(dhtgroup, scheme, "");
+    boost::regex trailing_slashes("/+$");
+    dhtgroup = boost::regex_replace(dhtgroup, trailing_slashes, "");
+    boost::regex leading_www("^www.");
+    dhtgroup = boost::regex_replace(dhtgroup, leading_www, "");
 
-        return dhtgroup;
-    }
+    return dhtgroup;
+  }
 
-    // On iOS, it is not possible to inject headers into every request
-    // Set the DHT group based on the referrer field or hostname (if referrer is not present)
-    auto i = hdr.find(http::field::referer);
-    if (i != hdr.end()) {
-        dht_group = from_url(std::string(i->value()));
-        hdr.erase(i);
-    } else {
-        dht_group = from_url(std::string(hdr.target()));
-    }
+  // On iOS, it is not possible to inject headers into every request
+  // Set the DHT group based on the referrer field or hostname (if referrer is
+  // not present)
+  auto i = hdr.find(http::field::referer);
+  if (i != hdr.end()) {
+    dht_group = from_url(std::string(i->value()));
+    hdr.erase(i);
+  } else {
+    dht_group = from_url(std::string(hdr.target()));
+  }
 #else
-    auto i = hdr.find(http_::request_group_hdr);
-    if (i != hdr.end()) {
-        dht_group = std::string(i->value());
-        hdr.erase(i);
-    }
+  auto i = hdr.find(http_::request_group_hdr);
+  if (i != hdr.end()) {
+    dht_group = std::string(i->value());
+    hdr.erase(i);
+  }
 #endif
 
-    return dht_group;
+  return dht_group;
 }
 
-static bool is_private(http::request_header<> const& hdr) {
-    bool ret = false;
-    auto i = hdr.find(http_::request_private_hdr);
-    if (i != hdr.end()) {
-        ret = boost::iequals(i->value(), http_::request_private_true);
-    }
-    return ret;
+static bool is_private(http::request_header<> const &hdr) {
+  bool ret = false;
+  auto i = hdr.find(http_::request_private_hdr);
+  if (i != hdr.end()) {
+    ret = boost::iequals(i->value(), http_::request_private_true);
+  }
+  return ret;
 }
 
-std::optional<CacheRequest> CacheRequest::from(CacheType cache_type, http::request_header<> orig_hdr) {
-    auto dht_group = extract_dht_group(orig_hdr);
-    if (!dht_group) return {};
+std::optional<CacheRequest>
+CacheRequest::from(CacheType cache_type, http::request_header<> orig_hdr) {
+  auto dht_group = extract_dht_group(orig_hdr);
+  if (!dht_group)
+    return {};
 
-    if (orig_hdr.method() != http::verb::get && orig_hdr.method() != http::verb::head) {
-        return {};
+  if (orig_hdr.method() != http::verb::get &&
+      orig_hdr.method() != http::verb::head) {
+    return {};
+  }
+
+  if (is_private(orig_hdr)) {
+    LOG_WARN("Mutually exclusive header fields in request: ",
+             http_::request_private_hdr, " and ", http_::request_group_hdr);
+    return {};
+  }
+
+  // Check the original request did not have a body
+  auto content_len_i = orig_hdr.find(http::field::content_length);
+
+  if (content_len_i != orig_hdr.end()) {
+    if (content_len_i->value() != "0") {
+      return {};
     }
+  }
 
-    if (is_private(orig_hdr)) {
-        LOG_WARN("Mutually exclusive header fields in request: ", http_::request_private_hdr, " and ", http_::request_group_hdr);
-        return {};
-    }
+  auto hdr = util::to_injector_request(std::move(orig_hdr));
 
-    // Check the original request did not have a body
-    auto content_len_i = orig_hdr.find(http::field::content_length);
+  if (!hdr) {
+    return {};
+  }
 
-    if (content_len_i != orig_hdr.end()) {
-        if (content_len_i->value() != "0") {
-            return {};
-        }
-    }
+  auto resource_id = cache::ResourceId::from_url(hdr->target());
 
-    auto hdr = util::to_injector_request(std::move(orig_hdr));
+  auto resource_key = cache::resource_key::from_url(hdr->target());
 
-    if (!hdr) {
-        return {};
-    }
-
-    auto resource_id = cache::ResourceId::from_url(hdr->target());
-
-    auto resource_key = cache::resource_key::from_url(hdr->target());
-
-    return CacheRequest(std::move(*hdr), cache_type, std::move(resource_id), resource_key, std::move(*dht_group));
+  return CacheRequest(std::move(*hdr), cache_type, std::move(resource_id),
+                      resource_key, std::move(*dht_group));
 }
 
 //----
 
 void CacheInjectRequest::authorize(std::string_view credentials) {
-    ouinet::authorize(_header, credentials);
+  ouinet::authorize(_header, credentials);
 }
 
 void CacheInjectRequest::set_druid(std::string_view druid) {
-    _header.set(http_::request_druid_hdr, druid);
+  _header.set(http_::request_druid_hdr, druid);
 }
 
 //----
 
 CacheRetrieveRequest CacheRequest::to_retrieve_request() const {
-    using R = CacheRetrieveRequest;
+  using R = CacheRetrieveRequest;
 
-    auto method = _header.method();
+  auto method = _header.method();
 
-    return _cache_type.visit(overloaded {
-            [&] (CacheType::Bep5Http type) -> R {
-                return CachePeerRetrieveRequest(method, type, _resource_id, _resource_key, _dht_group);
-            },
-            [&] (CacheType::Bep3HTTPOverI2P type) -> R {
-                return CachePeerRetrieveRequest(method, type, _resource_id, _resource_key, _dht_group);
-            },
-            [&] (CacheType::Ouisync) -> R {
-                return CacheOuisyncRetrieveRequest(method, _resource_id, _dht_group);
-            },
-        });
+  return _cache_type.visit(overloaded{
+      [&](CacheType::Bep5Http type) -> R {
+        return CachePeerRetrieveRequest(method, type, _resource_id,
+                                        _resource_key, _dht_group);
+      },
+      [&](CacheType::Bep3HTTPOverI2P type) -> R {
+        return CachePeerRetrieveRequest(method, type, _resource_id,
+                                        _resource_key, _dht_group);
+      },
+      [&](CacheType::Ouisync) -> R {
+        return CacheOuisyncRetrieveRequest(method, _resource_id, _dht_group);
+      },
+  });
 }
 
-
 std::optional<CacheInjectRequest> CacheRequest::to_inject_request() const {
-    using R = std::optional<CacheInjectRequest>;
+  using R = std::optional<CacheInjectRequest>;
 
-    return _cache_type.visit(overloaded {
-            [&] (CacheType::Bep5Http type) -> R {
-                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
-            },
-            [&] (CacheType::Bep3HTTPOverI2P type) -> R {
-                return CacheInjectRequest(_header, type, _resource_id, _dht_group);
-            },
-            [&] (CacheType::Ouisync) -> R {
-                return {};
-            },
-        });
+  return _cache_type.visit(overloaded{
+      [&](CacheType::Bep5Http type) -> R {
+        return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+      },
+      [&](CacheType::Bep3HTTPOverI2P type) -> R {
+        return CacheInjectRequest(_header, type, _resource_id, _dht_group);
+      },
+      [&](CacheType::Ouisync) -> R { return {}; },
+  });
 }
 
 void CacheRequest::set_if_none_match(std::string_view if_none_match) {
-    _header.set(http::field::if_none_match, if_none_match);
+  _header.set(http::field::if_none_match, if_none_match);
 }
 
 //----
 
 void InsecureRequest::authorize(std::string_view credentials) {
-    ouinet::authorize(_request, credentials);
+  ouinet::authorize(_request, credentials);
 }
 
-boost::optional<InsecureRequest> InsecureRequest::from(InjectingCacheType cache_type, http::request<http::string_body> request)
-{
-    if (is_private(request)) return {};
-    util::remove_ouinet_fields_ref(request);  // avoid accidental injection
-    return InsecureRequest(cache_type, std::move(request));
+boost::optional<InsecureRequest>
+InsecureRequest::from(InjectingCacheType cache_type,
+                      http::request<http::string_body> request) {
+  if (is_private(request))
+    return {};
+  util::remove_ouinet_fields_ref(request); // avoid accidental injection
+  return InsecureRequest(cache_type, std::move(request));
 }
 
 void PublicInjectorRequest::authorize(std::string_view credentials) {
-    std::visit(
-        [&] (auto&& alt) { alt.authorize(credentials); },
-        static_cast<Base&>(*this)
-    );
+  std::visit([&](auto &&alt) { alt.authorize(credentials); },
+             static_cast<Base &>(*this));
 }
 
 void InsecureRequest::set_druid(std::string_view druid) {
-    _request.set(http_::request_druid_hdr, druid);
+  _request.set(http_::request_druid_hdr, druid);
 }
 
 //----
 
 void PublicInjectorRequest::set_druid(std::string_view druid) {
-    std::visit(
-        [&] (auto&& alt) { alt.set_druid(druid); },
-        static_cast<Base&>(*this)
-    );
+  std::visit([&](auto &&alt) { alt.set_druid(druid); },
+             static_cast<Base &>(*this));
 }
 
 http::verb PublicInjectorRequest::method() const {
-    return std::visit(
-        [] (const auto& alt)
-        { return alt.method(); },
-        static_cast<const Base&>(*this)
-    );
+  return std::visit([](const auto &alt) { return alt.method(); },
+                    static_cast<const Base &>(*this));
 }
 
 bool PublicInjectorRequest::is_inject_request() const {
-    return std::get_if<CacheInjectRequest>(static_cast<const Base*>(this)) != nullptr;
+  return std::get_if<CacheInjectRequest>(static_cast<const Base *>(this)) !=
+         nullptr;
 }
 
-std::ostream& operator<<(std::ostream& os, CacheOuisyncRetrieveRequest const& rq) {
-    return os << "CacheOuisyncRetrieveRequest{ "
-        "method:" << rq._method << ", " <<
-        "resource_id:" << rq._resource_id << ", " <<
-        "group_id:" << rq._dht_group <<
-        " }";
+std::ostream &operator<<(std::ostream &os,
+                         CacheOuisyncRetrieveRequest const &rq) {
+  return os << "CacheOuisyncRetrieveRequest{ "
+               "method:"
+            << rq._method << ", " << "resource_id:" << rq._resource_id << ", "
+            << "group_id:" << rq._dht_group << " }";
 }
 
 } // namespace ouinet
