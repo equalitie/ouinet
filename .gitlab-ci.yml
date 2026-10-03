@@ -10,11 +10,7 @@ default:
     # Share containers and images per branch
     - CI_JOB_SLUG="${CI_PROJECT_PATH_SLUG}.${CI_COMMIT_REF_SLUG}"
     - CONTAINER_DURATION=6h
-    - |
-      CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} "\
-                     "--image-name ${CI_JOB_SLUG}"\
-                     "--container-duration ${CONTAINER_DURATION}"\
-                     "--check-code-format"
+    - CONTAINER_ARGS="--container-name ${CI_JOB_SLUG} --image-name ${CI_JOB_SLUG} --container-duration ${CONTAINER_DURATION} --check-code-format "
 
 # These rules should be added to every single required job to make sure that
 # are included in merge request pipelines.
