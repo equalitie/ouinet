@@ -183,6 +183,8 @@ function build_image (
         wget unzip openjdk-21-jdk ninja-build
         # For integration tests
         python3 python3-pip python3.13-venv python-is-python3
+        # For linting and code style checks
+        clang-format-19
     )
 
     # These would be downloaded automatically during building of Android
