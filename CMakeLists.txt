@@ -372,7 +372,6 @@ if (NOT ANDROID AND NOT IOS)
     file(GLOB injector_sources
         "./src/injector.cpp"
         "./src/injector_config.cpp"
-        "./src/ouiservice/bep5/server.cpp"
         "./src/http_logger.cpp"
     )
     

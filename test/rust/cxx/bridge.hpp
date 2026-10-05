@@ -21,8 +21,7 @@ namespace test {
 
     std::unique_ptr<Client> client_new(
         Context& ctx,
-        rust::Slice<const char* const> argv,
-        rust::Str log_tag
+        rust::Slice<const char* const> argv
     );
 
     void client_stop(std::unique_ptr<Client> client, rust::Box<Completer> completer);
@@ -33,8 +32,7 @@ namespace test {
 
     std::unique_ptr<Injector> injector_new(
         Context& ctx,
-        rust::Slice<const char* const> argv,
-        rust::Str log_tag
+        rust::Slice<const char* const> argv
     );
 
     void injector_stop(std::unique_ptr<Injector> injector, rust::Box<Completer> completer);

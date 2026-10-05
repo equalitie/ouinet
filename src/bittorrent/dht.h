@@ -3,6 +3,7 @@
 #include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/spawn.hpp>
 #include <set>
+#include "api.h"
 #include "node_id.h"
 #include "namespaces.h"
 #include "../util/promise.h"
@@ -13,7 +14,7 @@ class Cancel;
 
 namespace bittorrent {
 
-class DhtBase {
+class OUINET_COMMON_API DhtBase {
 public:
     using UdpEndpoint = asio::ip::udp::endpoint;
     using Executor = boost::asio::any_io_executor;
@@ -24,11 +25,13 @@ public:
 
     virtual ~DhtBase();
 
-    virtual void set_endpoints(const std::set<UdpEndpoint>&) = 0;
+    virtual void set_endpoints(const std::vector<asio_utp::udp_multiplexer>&) = 0;
 
     virtual Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) = 0;
 
-    virtual std::set<UdpEndpoint> local_endpoints() const = 0;
+    virtual std::vector<asio_utp::udp_multiplexer> udp_multiplexers() const = 0;
+
+    std::set<UdpEndpoint> local_endpoints() const;
 
     virtual std::set<UdpEndpoint> wan_endpoints() const = 0;
 

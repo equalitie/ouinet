@@ -208,9 +208,9 @@ BOOST_DATA_TEST_CASE(
             auto rq = CacheRequestBuilder(url).set_route(rpi).build();
             auto rs = fetch_through_client(client, rq, yield);
 
-            BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-            BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-            BOOST_CHECK(rs.body() == body);
+            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+            BOOST_REQUIRE(rs.body() == body);
         }
         client.stop();
     });
@@ -228,10 +228,12 @@ BOOST_DATA_TEST_CASE(
     test_storing_into_and_fetching_from_the_cache,
     data::make({ DhtImpl::mock, DhtImpl::real })
         * data::make({ 1, 2 })  // TODO: use more seeders
-        * data::make({ 1, 2 }), // TODO: use more leechers
+        * data::make({ 1, 2 }) // TODO: use more leechers
+        * data::make({ 1, 8 }),
     dht_impl,
     seeder_count,
-    leecher_count
+    leecher_count,
+    resource_count
 ) {
     get_logger().set_threshold(DEBUG);
 
@@ -241,8 +243,15 @@ BOOST_DATA_TEST_CASE(
 
     TestDir root;
 
+    std::map<util::Url, std::string> resources;
+
     HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    auto url = server.add_resource("/", generate_random_body());
+
+    for (uint16_t i = 0; i < resource_count; ++i) {
+        auto resource = generate_random_body();
+        auto url = server.add_resource(util::str("/resource-", i), resource);
+        resources[url] = std::move(resource);
+    }
 
     run(ctx, [&, server = std::move(server)] (Async yield) {
         auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
@@ -260,7 +269,8 @@ BOOST_DATA_TEST_CASE(
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians",
-                "--trace-root=injector"
+                "--trace-root=injector",
+                "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)
@@ -288,7 +298,9 @@ BOOST_DATA_TEST_CASE(
                     "--bt-bootstrap-no-default",
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
                     "--bt-allow-martians",
-                    "--trace-root", name
+                    "--trace-root", name,
+                    // TODO: Add test supporting local discovery
+                    "--disable-local-peer-discovery"s
                 }),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
@@ -317,7 +329,9 @@ BOOST_DATA_TEST_CASE(
                     "--bt-bootstrap-no-default",
                     "--bt-bootstrap-extra", util::str(dht_endpoint),
                     "--bt-allow-martians",
-                    "--trace-root"s, name
+                    "--trace-root"s, name,
+                    // TODO: Add test supporting local discovery
+                    "--disable-local-peer-discovery"s
                 }),
                 mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
             );
@@ -333,20 +347,21 @@ BOOST_DATA_TEST_CASE(
         }
 
         auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
-        auto rq = CacheRequestBuilder(url).build();
 
         // "Seeders" fetch the signed content through the "injector"
         WaitCondition fetch_from_injector_wc(yield.get_executor());
 
         for (auto& seeder : seeders) {
-            yield.spawn([&, lock = fetch_from_injector_wc.lock()] (Async yield) {
-                auto rs = fetch_through_client(seeder, rq, yield);
+            yield.spawn([&, seeder = &seeder, lock = fetch_from_injector_wc.lock()] (Async yield) {
+                for (auto& [url, body] : resources) {
+                    auto rq = CacheRequestBuilder(url).build();
+                    auto rs = fetch_through_client(*seeder, rq, yield);
 
-                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
-                BOOST_CHECK_EQUAL(rs.body(), control_body);
+                    BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+                    BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
+                    BOOST_REQUIRE_EQUAL(rs.body(), body);
+                }
             });
         }
 
@@ -356,12 +371,15 @@ BOOST_DATA_TEST_CASE(
         WaitCondition fetch_from_seeders_wc(yield.get_executor());
 
         for (auto& leecher : leechers) {
-            yield.spawn([&, lock = fetch_from_seeders_wc.lock()] (Async yield) {
-                auto rs = fetch_through_client(leecher, rq, yield);
+            yield.spawn([&, leecher = &leecher, lock = fetch_from_seeders_wc.lock()] (Async yield) {
+                for (auto& [url, body] : resources) {
+                    auto rq = CacheRequestBuilder(url).build();
+                    auto rs = fetch_through_client(*leecher, rq, yield);
 
-                BOOST_CHECK_EQUAL(rs.result(), http::status::ok);
-                BOOST_CHECK_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
-                BOOST_CHECK_EQUAL(rs.body(), control_body);
+                    BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+                    BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_dist_cache);
+                    BOOST_REQUIRE_EQUAL(rs.body(), body);
+                }
             });
         }
 
@@ -403,7 +421,8 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
             "--tls-ca-cert-store-file="s + server.certificate_path().string(),
             "--allow-private-targets",
             "--bt-bootstrap-no-default",
-            "--trace-root=injector"
+            "--trace-root=injector",
+            "--listen-on-utp-tls=127.0.0.1:0",
         }),
         ctx);
 
@@ -490,7 +509,8 @@ BOOST_DATA_TEST_CASE(
                 "--bt-bootstrap-no-default",
                 "--bt-bootstrap-extra", util::str(dht_endpoint),
                 "--bt-allow-martians",
-                "--trace-root=injector"
+                "--trace-root=injector",
+                "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
             mock_dht("injector", yield.get_executor(), mock_dht_swarms)

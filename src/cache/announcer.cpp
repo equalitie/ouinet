@@ -215,8 +215,16 @@ struct Announcer::Loop {
 
             if (d == 0s) return i;
 
-            auto cc = yield.cancel_slot([&] { _timer_cancel(); });
-            async_sleep(d, yield);
+            auto sleep_yield = yield;
+            auto cc0 = yield.cancel_slot([&] { _timer_cancel(); });
+            auto cc1 = _timer_cancel.connect([&] { sleep_yield.cancel(); });
+
+            try {
+                async_sleep(d, sleep_yield);
+            }
+            catch (const std::exception& e) {
+                if (yield.is_cancelled()) throw Async::Cancelled();
+            }
         }
     }
 
@@ -281,8 +289,7 @@ struct Announcer::Loop {
     }
 
     // Virtual announce method - to be overridden by children
-    virtual std::expected<void, sys::error_code>
-    announce(Entry& e, Async yield) = 0;
+    virtual std::expected<void, sys::error_code> announce(const Entry& e, Async yield) = 0;
 
     virtual ~Loop() { _cancel(); }
 };
@@ -312,7 +319,7 @@ struct Bep5Loop : public Announcer::Loop {
         });
     }
 
-    std::expected<void, sys::error_code> announce(Entry& e, Async yield) override
+    std::expected<void, sys::error_code> announce(const Entry& e, Async yield) override
     {
         LOG_DEBUG(_trace, " Announcing (BEP5/DHT): ", e.key, "...");
 

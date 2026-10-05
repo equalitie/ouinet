@@ -92,7 +92,7 @@ struct Client::Impl {
     std::shared_ptr<unsigned> _newest_proto_seen;
 
     AsioExecutor _ex;
-    std::set<udp::endpoint> _lan_my_endpoints;
+    std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
     shared_ptr<bt::DhtBase> _dht;
     string _uri_swarm_prefix;
     sign::PublicKey _cache_pk;
@@ -114,7 +114,7 @@ struct Client::Impl {
     Trace _trace;
 
     Impl( AsioExecutor ex
-        , std::set<udp::endpoint> lan_my_eps
+        , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
         , sign::PublicKey& cache_pk
         , fs::path cache_dir
         , Client::opt_path static_cache_dir
@@ -124,7 +124,7 @@ struct Client::Impl {
         , Trace trace)
         : _newest_proto_seen(std::make_shared<unsigned>(http_::protocol_version_current))
         , _ex(ex)
-        , _lan_my_endpoints(std::move(lan_my_eps))
+        , _udp_multiplexers(std::move(udp_multiplexers))
         , _uri_swarm_prefix(bep5::compute_uri_swarm_prefix
               (cache_pk, http_::protocol_version_current))
         , _cache_pk(cache_pk)
@@ -141,7 +141,7 @@ struct Client::Impl {
     {
         if (local_peer_discovery_enabled)
             _local_peer_discovery
-                = make_unique<LocalPeerDiscovery>(_ex, _lan_my_endpoints);
+                = make_unique<LocalPeerDiscovery>(_ex, _udp_multiplexers);
     }
 
     std::string compute_swarm_name(boost::string_view group) const {
@@ -512,7 +512,7 @@ struct Client::Impl {
                             , resource_key
                             , _cache_pk
                             , std::move(local_peers)
-                            , _lan_my_endpoints
+                            , _udp_multiplexers
                             , _newest_proto_seen
                             , trace);
                     }
@@ -829,7 +829,7 @@ struct Client::Impl {
 
 /* static */
 std::expected<std::shared_ptr<Client>, sys::error_code>
-Client::build( std::set<udp::endpoint> lan_my_eps
+Client::build( std::vector<asio_utp::udp_multiplexer> udp_multiplexers
              , sign::PublicKey cache_pk
              , fs::path cache_dir
              , boost::posix_time::time_duration max_cached_age
@@ -894,7 +894,7 @@ Client::build( std::set<udp::endpoint> lan_my_eps
         ? make_backed_http_store(std::move(store_dir), std::move(static_http_store), ex)
         : make_http_store(std::move(store_dir), ex);
 
-    unique_ptr<Impl> impl(new Impl( ex, std::move(lan_my_eps)
+    unique_ptr<Impl> impl(new Impl( ex, std::move(udp_multiplexers)
                                   , cache_pk, std::move(cache_dir), std::move(static_cache_dir)
                                   , std::move(http_store), max_cached_age
                                   , local_peer_discovery_enabled, yield.trace()));

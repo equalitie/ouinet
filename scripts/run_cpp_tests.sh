@@ -7,6 +7,7 @@ SRC_DIR=$(dirname $(dirname $0))
 TEST_SPECS=()
 EXCLUDED_TESTS=()
 WITH_GDB=y # TODO: Only works with Linux binaries at the moment
+LIST_TEST_TARGETS=n
 
 function error {(
     echo "$@"
@@ -29,6 +30,9 @@ while [[ "$#" -gt 0 ]]; do
         --without-gdb)
             # Useful e.g. when ASAN is enabled
             WITH_GDB=n
+            ;;
+        --list-test-targets)
+            LIST_TEST_TARGETS=y
             ;;
         *) error "Unknown option $1" ;;
     esac
@@ -147,6 +151,13 @@ function run_test {(
 # --- Main ---
 
 TEST_TARGETS=$(collect_targets)
+
+if [ "$LIST_TEST_TARGETS" == y ]; then
+    for test_target in ${TEST_TARGETS[@]}; do
+        echo "$test_target"
+    done
+    exit
+fi
 
 if [ -z "${TEST_SPECS[*]}" ]; then
     TEST_SPECS="${TEST_TARGETS}"
