@@ -19,7 +19,7 @@ class StoringReader : public http_response::AbstractReader {
 public:
     using Part = http_response::Part;
 
-    StoringReader(const CacheRequest&, Session, std::shared_ptr<cache::Client>);
+    StoringReader(const CacheRequest&, Session, std::shared_ptr<cache::Client>, Trace);
 
     StoringReader(const StoringReader&) = delete;
     StoringReader& operator=(const StoringReader&) = delete;

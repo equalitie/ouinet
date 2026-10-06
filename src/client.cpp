@@ -1585,7 +1585,7 @@ Client::State::maybe_wrap_in_storing_session(const CacheRequest& rq, Session res
     }
 
     return Session::create(
-            std::make_unique<StoringReader>(rq, std::move(response), cache),
+            std::make_unique<StoringReader>(rq, std::move(response), cache, yield.trace()),
             rq.header().method() == http::verb::head,
             yield);
 }
