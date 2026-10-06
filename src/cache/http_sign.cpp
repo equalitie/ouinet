@@ -214,6 +214,7 @@ std::string
 block_chunk_ext( const boost::optional<sign::Signature>& sig
                , const opt_block_digest_t& prev_digest)
 {
+    // https://datatracker.ietf.org/doc/html/rfc9112#section-7.1.1
     std::ostringstream exts;
 
     static const auto fmt_sx = ";" + http_::response_block_signature_ext + "=\"%s\"";
