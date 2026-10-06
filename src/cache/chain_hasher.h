@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../util/bytes.h"
+#include "../util/hash.h"
 #include "../util/sign.h"
+#include "../util/variant.h"
 #include <boost/format.hpp>
 
 namespace ouinet {
