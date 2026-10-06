@@ -235,7 +235,7 @@ BOOST_DATA_TEST_CASE(
     leecher_count,
     resource_count
 ) {
-    get_logger().set_threshold(DEBUG);
+    get_logger().set_threshold(INFO);
 
     LOG_INFO("dht_impl=", dht_impl, " seeder_count=", seeder_count, " leecher_count=", leecher_count);
 
@@ -261,7 +261,6 @@ BOOST_DATA_TEST_CASE(
     	Injector injector(
     	    make_config<InjectorConfig>({
                 "./no_injector_exec"s,
-                "--log-level=DEBUG",
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--tls-ca-cert-store-file="s + server.certificate_path().string(),
@@ -284,7 +283,6 @@ BOOST_DATA_TEST_CASE(
                 ctx,
                 make_config<ClientConfig>({
                     "./no_client_exec"s,
-                    "--log-level=DEBUG"s,
                     "--repo"s, root.make_subdir(name).string(),
                     "--injector-credentials"s, injector_credentials,
                     "--cache-type=bep5-http"s,
@@ -314,7 +312,6 @@ BOOST_DATA_TEST_CASE(
                 ctx,
                 make_config<ClientConfig>({
                     "./no_client_exec"s,
-                    "--log-level=DEBUG"s,
                     "--repo"s, root.make_subdir(name).string(),
                     "--injector-credentials"s, injector_credentials,
                     "--cache-type=bep5-http"s,
