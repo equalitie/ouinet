@@ -4,10 +4,11 @@
 #include "../util/bytes.h"
 #include "../util/hash.h"
 #include "../util/variant.h"
+#include "api.h"
 
 namespace ouinet::cache {
 
-class ChainHash {
+class OUINET_COMMON_API ChainHash {
 public:
     using SecretKey = sign::SecretKey;
     using PublicKey = sign::PublicKey;
@@ -33,7 +34,7 @@ private:
             Digest digest);
 };
 
-class ChainHasher {
+class OUINET_COMMON_API ChainHasher {
 public:
     using SecretKey = ChainHash::SecretKey;
     using Signature = ChainHash::Signature;
