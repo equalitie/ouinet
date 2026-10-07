@@ -1320,7 +1320,7 @@ Client::State::get_injector_connection(InjectingCacheType cache_type, Async yiel
 
     LOG_DEBUG(yield, " Connecting to the injector");
 
-    auto connect_e = injector->connect(yield);
+    auto connect_e = injector->connect(yield.tag("connect"));
 
     if (!connect_e) {
         LOG_WARN(yield, " Failed to connect to injector; ec=", connect_e.error());
@@ -1338,14 +1338,15 @@ Client::State::get_injector_connection(InjectingCacheType cache_type, Async yiel
 
 //------------------------------------------------------------------------------
 std::expected<Session, sys::error_code>
-Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, Async yield)
+Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, Async yield_)
 {
+    Async yield = yield_.tag("public_injector");
     auto metrics = _metrics.new_public_injector_request();
 
     return timeout(
         default_timeout::fetch_http(),
         [&](Async yield) -> std::expected<Session, sys::error_code> {
-            auto con = get_injector_connection(request.cache_type(), yield);
+            auto con = get_injector_connection(request.cache_type(), yield.tag("get_injector_conn"));
             if (!con) {
                 metrics.finish(con.error());
                 return std::unexpected(con.error());
