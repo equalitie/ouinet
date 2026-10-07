@@ -5,6 +5,7 @@
 
 #include <chrono>
 
+#include "../test/util/test_dir.h"
 #include "async_sleep.h"
 #include "namespaces.h"
 #include "ouiservice/i2p/sam.h"
