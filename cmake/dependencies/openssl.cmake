@@ -44,14 +44,9 @@ if (DEFINED OPENSSL_VERSION)
     set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-    # XXX: Why are these so different per platform?
-    # XXX: the -no-* options might actually be ignored as the documentation doesn't list them
-    #      with the leading dash and says every misspelled option will be ignored
-    #      https://wiki.openssl.org/index.php/Compilation_and_Installation
-    set(OPENSSL_CONFIGURE_FLAGS_Android no-shared -no-ssl3 -no-comp -no-engine)
-    set(OPENSSL_CONFIGURE_FLAGS_iOS     no-shared -no-dso -no-hw -no-engine -fembed-bitcode)
-    set(OPENSSL_CONFIGURE_FLAGS_Windows -no-shared -no-ssl3 -no-comp -no-engine)
-    set(OPENSSL_CONFIGURE_FLAGS ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
+    # See OpenSSL docs for purpose of each flag, 
+    # https://wiki.openssl.org/index.php/Compilation_and_Installation
+    set(OPENSSL_CONFIGURE_FLAGS no-shared no-ssl3 no-comp no-engine)
 endif()
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
