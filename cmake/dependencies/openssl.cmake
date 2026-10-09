@@ -44,100 +44,57 @@ if (DEFINED OPENSSL_VERSION)
     set(BUILT_OPENSSL_SSL_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX})
     set(BUILT_OPENSSL_CRYPTO_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+    # XXX: Windows needs PATH `set` instead of exported?
+    set(OPENSSL_PATH_EXPORT_Android export PATH=${COMPILER_DIR}:$ENV{PATH})
+    set(OPENSSL_PATH_EXPORT_iOS export PATH=${COMPILER_DIR}:$ENV{PATH})
+    set(OPENSSL_PATH_EXPORT_Windows set PATH=${COMPILER_DIR};$ENV{PATH})
+    set(OPENSSL_PATH_EXPORT ${OPENSSL_PATH_EXPORT_${CMAKE_SYSTEM_NAME}})
+
+    # Exports prior to config command are slightly different on each platform
+    set(OPENSSL_CONFIGURE_EXPORTS_Android export ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK} && ${OPENSSL_PATH_EXPORT})
+    set(OPENSSL_CONFIGURE_EXPORTS_iOS ${OPENSSL_PATH_EXPORT})
+    set(OPENSSL_CONFIGURE_EXPORTS_Windows export CC=${CMAKE_C_COMPILER} && ${OPENSSL_PATH_EXPORT})
+    set(OPENSSL_CONFIGURE_EXPORTS ${OPENSSL_CONFIGURE_EXPORTS_${CMAKE_SYSTEM_NAME}})
+
+    # `-U` removes the NDK built in definition to avoid redefinition warnings
+    # https://github.com/openssl/openssl/issues/18561
+    # By default OpenSSL will use the highest available Android API
+    # but we set it to use the one we use in the rest of the code.
+    # https://github.com/openssl/openssl/blob/master/NOTES-ANDROID.md
+    set(OPENSSL_CONFIGURE_FLAGS_Android -U__ANDROID_API__ -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL})
+    set(OPENSSL_CONFIGURE_FLAGS_iOS)
+    set(OPENSSL_CONFIGURE_FLAGS_Windows --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib)
     # See OpenSSL docs for purpose of each flag, 
     # https://wiki.openssl.org/index.php/Compilation_and_Installation
-    set(OPENSSL_CONFIGURE_FLAGS no-shared no-ssl3 no-comp no-engine)
+    set(OPENSSL_CONFIGURE_FLAGS no-shared no-ssl3 no-comp no-engine ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
 endif()
 
-if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
-    externalproject_add(built_openssl
-        URL ${OPENSSL_URL}
-        URL_HASH ${OPENSSL_URL_HASH}
-        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-        CONFIGURE_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_ROOT=${CMAKE_ANDROID_NDK}
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && ./Configure
-                ${OPENSSL_TARGET}
-                ${OPENSSL_CONFIGURE_FLAGS}
-                --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-                # `-U` removes the NDK built in definition to avoid redefinition warnings
-                # https://github.com/openssl/openssl/issues/18561
-                -U__ANDROID_API__
-                # By default OpenSSL will use the highest available Android API
-                # but we it to use the one we use in the rest of the code.
-                # https://github.com/openssl/openssl/blob/master/NOTES-ANDROID.md
-                -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL}
-        BUILD_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && make depend
-            && make build_libs
-        BUILD_BYPRODUCTS
-            ${BUILT_OPENSSL_SSL_LIBRARY}
-            ${BUILT_OPENSSL_CRYPTO_LIBRARY}
-        INSTALL_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && make install_dev
-    )
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
-    externalproject_add(built_openssl
-        URL ${OPENSSL_URL}
-        URL_HASH ${OPENSSL_URL_HASH}
-        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-        CONFIGURE_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && ./Configure
-                ${OPENSSL_TARGET}
-                ${OPENSSL_CONFIGURE_FLAGS}
-                --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-        BUILD_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && make depend
-            && make build_libs
-        BUILD_BYPRODUCTS
-            ${BUILT_OPENSSL_SSL_LIBRARY}
-            ${BUILT_OPENSSL_CRYPTO_LIBRARY}
-        INSTALL_COMMAND
-               cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export PATH=${COMPILER_DIR}:$ENV{PATH}
-            && make install_dev
-    )
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    externalproject_add(built_openssl
-        URL ${OPENSSL_URL}
-        URL_HASH ${OPENSSL_URL_HASH}
-        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-        CONFIGURE_COMMAND
+externalproject_add(built_openssl
+    URL ${OPENSSL_URL}
+    URL_HASH ${OPENSSL_URL_HASH}
+    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
+    CONFIGURE_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && set PATH=${COMPILER_DIR};$ENV{PATH}
-            && export CC=${CMAKE_C_COMPILER}
-            && ./Configure
+        && ${OPENSSL_CONFIGURE_EXPORTS}
+        && ./Configure
             ${OPENSSL_TARGET}
-                ${OPENSSL_CONFIGURE_FLAGS}
-                --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-                --libdir=${CMAKE_CURRENT_BINARY_DIR}/openssl/install/lib
-        ${BUILD_JOB_SERVER_AWARE}
-        BUILD_COMMAND
+            ${OPENSSL_CONFIGURE_FLAGS}
+            --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
+    ${BUILD_JOB_SERVER_AWARE}
+    BUILD_COMMAND
             cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && set PATH=${COMPILER_DIR};$ENV{PATH}
-            && make depend
-            && make build_libs
-        BUILD_BYPRODUCTS
-            ${BUILT_OPENSSL_SSL_LIBRARY}
-            ${BUILT_OPENSSL_CRYPTO_LIBRARY}
-        ${INSTALL_JOB_SERVER_AWARE}
-        INSTALL_COMMAND
-        cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-        && set PATH=${COMPILER_DIR};$ENV{PATH}
+        && ${OPENSSL_PATH_EXPORT}
+        && make depend
+        && make build_libs
+    BUILD_BYPRODUCTS
+        ${BUILT_OPENSSL_SSL_LIBRARY}
+        ${BUILT_OPENSSL_CRYPTO_LIBRARY}
+    ${INSTALL_JOB_SERVER_AWARE}
+    INSTALL_COMMAND
+            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+        && ${OPENSSL_PATH_EXPORT}
         && make install_dev
-    )
-endif()
+)
 
 if (DEFINED OPENSSL_VERSION)
     set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
