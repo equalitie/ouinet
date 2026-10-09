@@ -67,36 +67,34 @@ if (DEFINED OPENSSL_VERSION)
     # See OpenSSL docs for purpose of each flag, 
     # https://wiki.openssl.org/index.php/Compilation_and_Installation
     set(OPENSSL_CONFIGURE_FLAGS no-shared no-ssl3 no-comp no-engine ${OPENSSL_CONFIGURE_FLAGS_${CMAKE_SYSTEM_NAME}})
-endif()
 
-externalproject_add(built_openssl
-    URL ${OPENSSL_URL}
-    URL_HASH ${OPENSSL_URL_HASH}
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
-    CONFIGURE_COMMAND
-            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-        && ${OPENSSL_CONFIGURE_EXPORTS}
-        && ./Configure
-            ${OPENSSL_TARGET}
-            ${OPENSSL_CONFIGURE_FLAGS}
-            --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
-    ${BUILD_JOB_SERVER_AWARE}
-    BUILD_COMMAND
-            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-        && ${OPENSSL_PATH_EXPORT}
-        && make depend
-        && make build_libs
-    BUILD_BYPRODUCTS
-        ${BUILT_OPENSSL_SSL_LIBRARY}
-        ${BUILT_OPENSSL_CRYPTO_LIBRARY}
-    ${INSTALL_JOB_SERVER_AWARE}
-    INSTALL_COMMAND
-            cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-        && ${OPENSSL_PATH_EXPORT}
-        && make install_dev
-)
+    externalproject_add(built_openssl
+        URL ${OPENSSL_URL}
+        URL_HASH ${OPENSSL_URL_HASH}
+        PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
+        CONFIGURE_COMMAND
+                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+            && ${OPENSSL_CONFIGURE_EXPORTS}
+            && ./Configure
+                ${OPENSSL_TARGET}
+                ${OPENSSL_CONFIGURE_FLAGS}
+                --prefix=${CMAKE_CURRENT_BINARY_DIR}/openssl/install
+        ${BUILD_JOB_SERVER_AWARE}
+        BUILD_COMMAND
+                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+            && ${OPENSSL_PATH_EXPORT}
+            && make depend
+            && make build_libs
+        BUILD_BYPRODUCTS
+            ${BUILT_OPENSSL_SSL_LIBRARY}
+            ${BUILT_OPENSSL_CRYPTO_LIBRARY}
+        ${INSTALL_JOB_SERVER_AWARE}
+        INSTALL_COMMAND
+                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
+            && ${OPENSSL_PATH_EXPORT}
+            && make install_dev
+    )
 
-if (DEFINED OPENSSL_VERSION)
     set(OpenSSL_DIR ${CMAKE_CURRENT_LIST_DIR}/inline-openssl)
     list(INSERT CMAKE_MODULE_PATH 0 ${OpenSSL_DIR})
 endif()
