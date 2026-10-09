@@ -160,6 +160,49 @@ BOOST_AUTO_TEST_CASE(test_client_fetch_from_origin) {
     });
 }
 
+BOOST_AUTO_TEST_CASE(test_client_fetch_error_from_origin) {
+    asio::io_context ctx;
+
+    TestDir root;
+
+    const std::string injector_credentials = "username:password";
+
+    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+    Client client(ctx, make_config<ClientConfig>({
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client").string(),
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+            "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+            "--bt-bootstrap-no-default",
+            "--trace-root=client",
+        }));
+
+    // Clients are started explicitly
+    client.start();
+
+    run(ctx, [&, server = std::move(server)] (Async yield) mutable {
+        // Set non-existent URL
+        auto url = util::Url::from(
+            "https://en.wikipade.io/wiki/Main_Page"s)
+        .value();
+
+        auto rq = CacheRequestBuilder(url).build();
+
+        auto rs1 = unwrap(timeout(30s, [&] (Async yield) {
+            return fetch_through_client(client, rq, yield);
+        }, yield));
+
+        BOOST_REQUIRE_EQUAL(rs1.result(), http::status::bad_gateway);
+        BOOST_REQUIRE(rs1.body() == "Failed to retrieve the resource (after attempting all configured mechanisms)");
+
+        client.stop();
+    });
+}
+
 BOOST_DATA_TEST_CASE(
     test_client_fetch_from_injector,
     data::make({"tcp"s, "utp"s}),
@@ -218,6 +261,65 @@ BOOST_DATA_TEST_CASE(
         client.stop();
     });
 }
+
+BOOST_DATA_TEST_CASE(
+    test_client_fetch_error_from_dcache,
+    data::make({"tcp"s, "utp"s}),
+    proto
+){
+    asio::io_context ctx;
+    run(ctx, [&ctx, &proto] (Async yield){
+        TestDir root;
+        HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+        const std::string injector_credentials = "username:password";
+
+        Injector injector(
+            make_config<InjectorConfig>({
+                "./no_injector_exec"s,
+                "--log-level=DEBUG",
+                "--repo"s, root.make_subdir("injector").string(),
+                "--credentials"s, injector_credentials,
+                "--listen-on-" + proto + "=0.0.0.0:7070"s, // TODO: bind to random port
+                "--tls-ca-cert-store-file="s + server.certificate_path().string(),
+                "--trace-root=injector"s,
+                "--allow-private-targets"s,
+            }),
+            ctx
+        );
+
+        Client client(ctx, make_config<ClientConfig>({
+            "./no_client_exec"s,
+            "--log-level=DEBUG"s,
+            "--repo"s, root.make_subdir("client"s).string(),
+            "--injector-credentials"s, injector_credentials,
+            "--cache-type=bep5-http"s,
+            "--cache-http-public-key"s, injector.cache_http_public_key(),
+            "--disable-origin-access"s,
+            "--injector-ep=" + proto + ":127.0.0.1:7070"s,
+            // Bind to random ports to avoid clashes
+            "--listen-on-tcp=127.0.0.1:0"s,
+            "--front-end-ep=127.0.0.1:0"s,
+            "--trace-root=client"s,
+            "--allow-private-targets"s,
+        }));
+        client.start();
+
+        auto rpi = Route::DCache{CacheType::Bep5Http{}};
+        // Set non-existent URL
+        auto url = util::Url::from(
+            "https://en.wikipade.io/wiki/Main_Page"s)
+        .value();
+        auto rq = CacheRequestBuilder(url).set_route(rpi).build();
+        auto rs = unwrap(timeout(30s, [&] (Async yield) {
+            return fetch_through_client(client, rq, yield);
+        }, yield));
+
+        BOOST_REQUIRE_EQUAL(rs.result(), http::status::bad_gateway);
+        BOOST_REQUIRE(rs.body() == "Failed to retrieve the resource (after attempting all configured mechanisms)");
+        client.stop();
+    });
+}
+
 
 // An integration test with three types of nodes: the 'injector', a number of 'seeder' clients
 // and a number of 'leecher' clients.
