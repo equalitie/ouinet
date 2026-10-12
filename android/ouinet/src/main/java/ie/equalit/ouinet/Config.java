@@ -81,6 +81,7 @@ public class Config implements Parcelable {
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
+        private boolean dropSavedOpts = false;
         private List<String> requestFields = null;
 
         private boolean metricsEnableOnStart = false;
@@ -272,6 +273,10 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder setDropSavedOpts(boolean dropSavedOpts){
+            this.dropSavedOpts = dropSavedOpts;
             return this;
         }
         public ConfigBuilder addRequestField(String requestField) {
@@ -535,6 +540,7 @@ public class Config implements Parcelable {
                     disableInjectorAccess,
                     logLevel,
                     enableLogFile,
+                    dropSavedOpts,
                     requestFields,
                     metricsEnableOnStart,
                     metricsServerUrls,
@@ -584,6 +590,7 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private boolean dropSavedOpts;
     private List<String> requestFields;
     private boolean metricsEnableOnStart;
     private List<String> metricsServerUrls;
@@ -631,6 +638,7 @@ public class Config implements Parcelable {
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
                   boolean enableLogFile,
+                  boolean dropSavedOpts,
                   List<String> requestFields,
                   boolean metricsEnableOnStart,
                   List<String> metricsServerUrls,
@@ -677,6 +685,7 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.dropSavedOpts = dropSavedOpts;
         this.requestFields = (requestFields == null ? null : new ArrayList<>(requestFields));
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
@@ -800,6 +809,9 @@ public class Config implements Parcelable {
     public boolean getEnableLogFile() {
         return enableLogFile;
     }
+    public boolean getDropSavedOpts() {
+        return dropSavedOpts;
+    }
     public List<String> getRequestFields() {
         return (requestFields == null ? null : new ArrayList<>(requestFields));
     }
@@ -882,6 +894,7 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeInt(dropSavedOpts ? 1 : 0);
         out.writeStringList(requestFields);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeStringList(metricsServerUrls);
@@ -949,6 +962,7 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+        dropSavedOpts = in.readInt() != 0;
 
         requestFields = in.createStringArrayList();
 
