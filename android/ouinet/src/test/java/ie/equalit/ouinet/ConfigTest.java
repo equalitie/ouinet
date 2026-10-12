@@ -36,7 +36,6 @@ public class ConfigTest {
     private static final String INJECTOR_TLS_CERT = "injectortlscert123123123123123";
     private static final String TLS_CA_CERT_PATH = "file:///android_asset/tls-ca-cert.pem";
     private static final String TLS_CA_CERT = "tlscacertcontent";
-    private static final String OBFS_PROXY_CONTENT = "obfs4assetcontent";
     private static final String CACHE_TYPE = "bep5-http";
     private static final String CACHE_STATIC_PATH = "static-cache";
     private static final String CACHE_STATIC_CONTENT_PATH = "static-cache/.ouinet";
@@ -81,15 +80,11 @@ public class ConfigTest {
         String caRootCertPath = ouinetDir + "/ssl-ca-cert.pem";
         String injectorTlsCertPath = ouinetDir + "/injector-tls-cert.pem";
         String tlsCaCertPath = ouinetDir + "/assets/tls-ca-cert.pem";
-        String obfsFilePath = ouinetDir + "/" + Config.OBFS4_PROXY;
         String cacheStaticPath = filesDir.getPath() + "/" + CACHE_STATIC_PATH;
         String cacheStaticContentPath = filesDir.getPath() + "/" + CACHE_STATIC_CONTENT_PATH;
 
         when(mockContext.getFilesDir()).thenReturn(filesDir);
         when(mockContext.getAssets()).thenReturn(mockAssetManager);
-        InputStream obfsproxyIs =
-                new ByteArrayInputStream(OBFS_PROXY_CONTENT.getBytes(StandardCharsets.UTF_8));
-        when(mockAssetManager.open(Config.OBFS4_PROXY)).thenReturn(obfsproxyIs);
         InputStream tlsCaCertIs =
                 new ByteArrayInputStream(TLS_CA_CERT.getBytes(StandardCharsets.UTF_8));
         when(mockAssetManager.open("tls-ca-cert.pem")).thenReturn(tlsCaCertIs);
@@ -136,9 +131,6 @@ public class ConfigTest {
 
         assertThat(config.getInjectorTlsCertPath(), is(injectorTlsCertPath));
         assertThat(contentOf(new File(config.getInjectorTlsCertPath())), is(INJECTOR_TLS_CERT));
-
-        assertThat(config.getObfs4ProxyPath(), is(ouinetDir));
-        assertThat(contentOf(new File(obfsFilePath)), is(OBFS_PROXY_CONTENT));
       }
     }
 }
