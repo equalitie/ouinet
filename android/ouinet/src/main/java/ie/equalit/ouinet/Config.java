@@ -40,7 +40,6 @@ public class Config implements Parcelable {
 
     private static final String FILE_PROTO = "file://";
     private static final String ASSET_PATH = FILE_PROTO + "/android_asset/";
-    @VisibleForTesting static final String OBFS4_PROXY = "obfs4proxy";
     private static final String OUINET_DIR = "/ouinet";
     private static final String ERROR_PAGE_FILE = "error-page.html";
 
@@ -410,24 +409,6 @@ public class Config implements Parcelable {
             return Ouinet.getCARootCert(ouinetDirectory);
         }
 
-        /**
-         * Copies the objfs proxy executable from the APK assets onto the local filesystem and
-         * makes it executable.
-         * @param ouinetDirectory
-         * @return Returns the directory where the executable was placed, or null if it could not
-         * write to the file.
-         */
-        private @Nullable String setupObfs4ProxyExecutable(String ouinetDirectory) {
-            String src = ASSET_PATH + OBFS4_PROXY;
-            String dest = ouinetDirectory + "/" + OBFS4_PROXY;
-            if (copyExecutableToFile(src, dest)) {
-                Log.d(TAG, "obfs4proxy copied to " + dest);
-                return ouinetDirectory;
-            }
-            Log.d(TAG, "obfs4proxy not copied");
-            return null;
-        }
-
         private boolean copyAssetToFile(String asset, String dest){
             String dataPath = context.getApplicationInfo().dataDir;
             String dataFilePath = FILE_PROTO + dataPath;
@@ -510,7 +491,6 @@ public class Config implements Parcelable {
                     setupTlsCaCertStore(ouinetDirectory),
                     setupErrorPage(ouinetDirectory),
                     setupCaRootCert(ouinetDirectory),
-                    setupObfs4ProxyExecutable(ouinetDirectory),
                     cacheType,
                     cachePrivate,
                     cacheStaticPath,
@@ -560,7 +540,6 @@ public class Config implements Parcelable {
     private String tlsCaCertStoreDir;
     private String errorPagePath;
     private String caRootCertPath;
-    private String obfs4ProxyPath;
     private String cacheType;
     private boolean cachePrivate;
     private String cacheStaticPath;
@@ -608,7 +587,6 @@ public class Config implements Parcelable {
                   String tlsCaCertStoreDir,
                   String errorPagePath,
                   String caRootCertPath,
-                  String obfs4ProxyPath,
                   String cacheType,
                   boolean cachePrivate,
                   String cacheStaticPath,
@@ -655,7 +633,6 @@ public class Config implements Parcelable {
         this.tlsCaCertStoreDir = tlsCaCertStoreDir;
         this.errorPagePath = errorPagePath;
         this.caRootCertPath = caRootCertPath;
-        this.obfs4ProxyPath = obfs4ProxyPath;
         this.cacheType = cacheType;
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
@@ -718,9 +695,6 @@ public class Config implements Parcelable {
     }
     public String getCaRootCertPath() {
         return caRootCertPath;
-    }
-    public String getObfs4ProxyPath() {
-        return obfs4ProxyPath;
     }
     public String getCacheType() {
         return cacheType;
@@ -863,7 +837,6 @@ public class Config implements Parcelable {
         out.writeString(tlsCaCertStoreDir);
         out.writeString(errorPagePath);
         out.writeString(caRootCertPath);
-        out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
@@ -921,7 +894,6 @@ public class Config implements Parcelable {
         tlsCaCertStoreDir = in.readString();
         errorPagePath = in.readString();
         caRootCertPath = in.readString();
-        obfs4ProxyPath = in.readString();
         cacheType = in.readString();
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();

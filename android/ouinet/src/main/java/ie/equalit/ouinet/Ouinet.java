@@ -194,9 +194,6 @@ public class Ouinet {
         }
 
         List<String> path = new ArrayList<>();
-        if (config.getObfs4ProxyPath() != null) {
-            path.add(config.getObfs4ProxyPath());
-        }
 
         Set<String> dnsProtocols = config.getDnsProtocols();
         if (dnsProtocols != null) {
