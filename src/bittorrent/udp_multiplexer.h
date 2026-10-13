@@ -29,7 +29,7 @@ private:
     struct SendEntry {
         std::string message;
         udp::endpoint to;
-        sys::error_code* return_ec;
+        std::shared_ptr<sys::error_code> return_ec;
         Cancel sent_signal;
     };
 
@@ -239,12 +239,12 @@ void UdpMultiplexer::send(
 ) {
     ConditionVariable condition(get_executor());
 
-    sys::error_code ec;
+    auto ec = std::make_shared<sys::error_code>();
 
     _send_queue.emplace_back();
     _send_queue.back().message = std::move(message);
     _send_queue.back().to = to;
-    _send_queue.back().return_ec = &ec;
+    _send_queue.back().return_ec = ec;
 
     auto sent_slot = _send_queue.back().sent_signal.connect([&] () {
         condition.notify();
@@ -265,7 +265,7 @@ void UdpMultiplexer::send(
         or_throw(yield, asio::error::operation_aborted);
     }
 
-    return or_throw(yield, ec);
+    return or_throw(yield, *ec);
 }
 
 inline
