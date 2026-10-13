@@ -1044,7 +1044,7 @@ MultiPeerReader::async_read_part_impl(Async yield)
         return std::move(p);
     }
 
-    if (_block_id >= _reference_hash_list->blocks.size()) {
+    if (_next_block_id >= _reference_hash_list->blocks.size()) {
         mark_done();
         if (!_last_chunk_hdr_sent) {
             _last_chunk_hdr_sent = true;
@@ -1054,13 +1054,15 @@ MultiPeerReader::async_read_part_impl(Async yield)
     }
 
     while (true /* do until successful block retrieval */) {
-        auto block_e = fetch_block(_block_id, yield);
+        auto block_e = fetch_block(_next_block_id, yield);
         if (!block_e) {
             return std::unexpected(block_e.error());
         }
         auto block = std::move(*block_e);
 
-        ++_block_id;
+        auto block_id = _next_block_id;
+
+        ++_next_block_id;
 
         if (!block) {
             mark_done();
@@ -1073,10 +1075,18 @@ MultiPeerReader::async_read_part_impl(Async yield)
 
         ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
 
-        _next_chunk_hdr_ext = std::move(block->chunk_hdr.exts);
+        // Do not use the `block->chunk_hdr.exts` for setting
+        // `_next_chunk_hdr_ext` because the block could have come from a
+        // different injection (have a different injection ID) and thus the
+        // chained signature would be different than the one in the
+        // `_reference_hash_list`.
+        std::string block_sig = util::base64_encode(_reference_hash_list->blocks[block_id].chained_hash_signature.bytes);
+        // https://datatracker.ietf.org/doc/html/rfc9112#section-7.1.1
+        _next_chunk_hdr_ext = ";" + http_::response_block_signature_ext + "=\"" + block_sig + "\"";
+
         _next_chunk_body = std::move(block->chunk_body);
 
-        if (_block_id == _reference_hash_list->blocks.size()) {
+        if (_next_block_id == _reference_hash_list->blocks.size()) {
             _next_trailer = std::move(block->trailer);
         }
 

@@ -102,7 +102,7 @@ private:
     std::unique_ptr<Peers> _peers;
     Trace _trace;
     bool _head_sent = false;
-    size_t _block_id = 0;
+    size_t _next_block_id = 0;
 
     std::string _next_chunk_hdr_ext;
     std::optional<http_response::ChunkBody> _next_chunk_body;

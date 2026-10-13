@@ -18,14 +18,16 @@ struct StoringReader::Impl : std::enable_shared_from_this<Impl> {
     Queue queue;
     Session session;
     std::shared_ptr<cache::Client> cache;
+    Trace trace;
     std::string dht_group;
     cache::ResourceId resource_id;
     bool is_done;
 
-    Impl(const CacheRequest& rq, Session session, std::shared_ptr<cache::Client> cache):
+    Impl(const CacheRequest& rq, Session session, std::shared_ptr<cache::Client> cache, Trace trace):
         queue(session.get_executor(), 1),
         session(std::move(session)),
         cache(std::move(cache)),
+        trace(std::move(trace)),
         dht_group(rq.dht_group()),
         resource_id(rq.resource_id()),
         is_done(false)
@@ -38,7 +40,7 @@ struct StoringReader::Impl : std::enable_shared_from_this<Impl> {
             // destroyed, we still want to write whatever has been pushed into
             // the queue.
             Cancel unused_cancel;
-            Async yield(y, unused_cancel);
+            Async yield(y, unused_cancel, self->trace);
             AsyncQueueReader queue_reader(self->queue);
             auto r = self->cache->store(self->resource_id, self->dht_group, queue_reader, yield);
             if (!r) LOG_ERROR(yield, " Failed to write response to cache; ec=", r.error());
@@ -69,8 +71,8 @@ struct StoringReader::Impl : std::enable_shared_from_this<Impl> {
     }
 };
 
-StoringReader::StoringReader(const CacheRequest& rq, Session session, std::shared_ptr<cache::Client> cache)
-    : _impl(std::make_shared<Impl>(rq, std::move(session), std::move(cache)))
+StoringReader::StoringReader(const CacheRequest& rq, Session session, std::shared_ptr<cache::Client> cache, Trace trace)
+    : _impl(std::make_shared<Impl>(rq, std::move(session), std::move(cache), std::move(trace)))
 {
     _impl->start();
 }

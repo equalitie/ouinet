@@ -10,7 +10,7 @@ WITH_GDB=y # TODO: Only works with Linux binaries at the moment
 LIST_TEST_TARGETS=n
 
 function error {(
-    echo "$@"
+    echo "$@" >&2
     exit 1
 )}
 

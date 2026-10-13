@@ -107,7 +107,15 @@ UtpOuiServiceClient::connect(Async yield)
 
         auto result = timeout(
             retry_timeout[i],
-            [&](auto yield) { return socket.async_connect(_remote_endpoint, yield); },
+            [&](auto yield) {
+                // NOTE: Since asio_utp is generic over the token type, we need
+                // to do explicit cancellation.
+                auto cancel_slot = yield.cancel_slot([&socket] () {
+                    if (socket.is_open()) socket.close();
+                });
+
+                return socket.async_connect(_remote_endpoint, yield);
+            },
             yield
         );
 

@@ -3,6 +3,7 @@
 #include <asio_utp/udp_multiplexer.hpp>
 #include <boost/asio/spawn.hpp>
 #include <set>
+#include "api.h"
 #include "node_id.h"
 #include "namespaces.h"
 #include "../util/promise.h"
@@ -13,7 +14,7 @@ class Cancel;
 
 namespace bittorrent {
 
-class DhtBase {
+class OUINET_COMMON_API DhtBase {
 public:
     using UdpEndpoint = asio::ip::udp::endpoint;
     using Executor = boost::asio::any_io_executor;

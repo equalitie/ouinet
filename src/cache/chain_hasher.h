@@ -2,11 +2,13 @@
 
 #include "../util/sign.h"
 #include "../util/bytes.h"
-#include <boost/format.hpp>
+#include "../util/hash.h"
+#include "../util/variant.h"
+#include "api.h"
 
-namespace ouinet { namespace cache {
+namespace ouinet::cache {
 
-class ChainHash {
+class OUINET_COMMON_API ChainHash {
 public:
     using SecretKey = sign::SecretKey;
     using PublicKey = sign::PublicKey;
@@ -29,17 +31,10 @@ private:
     std::string str_to_sign(
             const std::string& injection_id,
             size_t offset,
-            Digest digest)
-    {
-        static const auto fmt_ = "%s%c%d%c%s";
-        return ( boost::format(fmt_)
-               % injection_id % '\0'
-               % offset % '\0'
-               % util::bytes::to_string_view(digest)).str();
-    }
+            Digest digest);
 };
 
-class ChainHasher {
+class OUINET_COMMON_API ChainHasher {
 public:
     using SecretKey = ChainHash::SecretKey;
     using Signature = ChainHash::Signature;
@@ -62,35 +57,7 @@ public:
         : _offset(0)
     {}
 
-    ChainHash calculate_block(size_t data_size, Digest data_digest, SigOrSigner sig_or_signer)
-    {
-        Hash chained_hasher;
-
-        if (_prev_chained_signature) {
-            chained_hasher.update(_prev_chained_signature->bytes);
-        }
-
-        if (_prev_chained_digest) {
-            chained_hasher.update(*_prev_chained_digest);
-        }
-
-        chained_hasher.update(data_digest);
-
-        Digest chained_digest = chained_hasher.close();
-
-        Signature chained_signature = util::apply(sig_or_signer,
-                [&] (const Signature& s) { return s; },
-                [&] (const Signer& s)    { return s.sign(_offset, chained_digest); });
-
-        size_t old_offset = _offset;
-
-        // Prepare for next block
-        _offset += data_size;
-        _prev_chained_digest    = chained_digest;
-        _prev_chained_signature = chained_signature;
-
-        return {old_offset, chained_digest, chained_signature};
-    }
+    ChainHash calculate_block(size_t data_size, Digest data_digest, SigOrSigner sig_or_signer);
 
     void set_prev_chained_digest(Digest prev_chained_digest) {
         _prev_chained_digest = prev_chained_digest;
@@ -110,4 +77,4 @@ private:
     boost::optional<Signature> _prev_chained_signature;
 };
 
-}} // namespaces
+} // namespace
