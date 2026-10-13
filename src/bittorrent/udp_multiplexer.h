@@ -262,7 +262,7 @@ void UdpMultiplexer::send(
     condition.wait(yield);
 
     if (cancelled || terminated) {
-        or_throw(yield, asio::error::operation_aborted);
+        *ec = asio::error::operation_aborted;
     }
 
     return or_throw(yield, *ec);
