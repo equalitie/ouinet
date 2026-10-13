@@ -663,11 +663,6 @@ public:
 
                 LOG_DEBUG(yield, " Done fetching hash list; result=", debug(result));
 
-                if (result == std::unexpected(asio::error::timed_out)) {
-                    LOG_DEBUG(yield, " BEP5 hash list download timed out");
-                    return;
-                }
-
                 peer->_candidate_hook.unlink();
 
                 if (result) {
