@@ -14,6 +14,7 @@
 #include "util/select.h"
 #include "injector.h"
 #include "client.h"
+#include "swarm_calculator.h"
 #include "util/random.h"
 #include "ssl/util.h"
 
@@ -264,14 +265,42 @@ BOOST_DATA_TEST_CASE(
 
 BOOST_DATA_TEST_CASE(
     test_client_fetch_error_from_dcache,
-    data::make({"tcp"s, "utp"s}),
-    proto
+    data::make({"tcp"s, "utp"s})
+        * data::make({false, true}),
+    proto,
+    with_mallory
 ){
+    struct Mallory {
+        asio::any_io_executor exec;
+        MockDht dht;
+        asio_utp::udp_multiplexer mux;
+
+        Mallory(asio::any_io_executor exec, std::shared_ptr<MockDht::Swarms> swarms) :
+            exec(std::move(exec)),
+            dht("mallory", this->exec, swarms),
+            mux(this->exec)
+        {
+            sys::error_code ec;
+            mux.bind(asio::ip::udp::endpoint(asio::ip::address_v4::any(), 0), ec);
+            BOOST_REQUIRE(!ec);
+            dht.set_endpoints({mux});
+        }
+    };
+
     asio::io_context ctx;
-    run(ctx, [&ctx, &proto] (Async yield){
+
+    run(ctx, [&] (Async yield){
         TestDir root;
         HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
         const std::string injector_credentials = "username:password";
+
+        auto mock_dht_swarms = std::make_shared<MockDht::Swarms>();
+
+        std::optional<Mallory> mallory;
+        
+        if (with_mallory) {
+            mallory.emplace(yield.get_executor(), mock_dht_swarms);
+        }
 
         Injector injector(
             make_config<InjectorConfig>({
@@ -284,38 +313,52 @@ BOOST_DATA_TEST_CASE(
                 "--trace-root=injector"s,
                 "--allow-private-targets"s,
             }),
-            ctx
+            ctx,
+            std::make_shared<MockDht>("injector", yield.get_executor(), mock_dht_swarms)
         );
 
         Client client(ctx, make_config<ClientConfig>({
-            "./no_client_exec"s,
-            "--log-level=DEBUG"s,
-            "--repo"s, root.make_subdir("client"s).string(),
-            "--injector-credentials"s, injector_credentials,
-            "--cache-type=bep5-http"s,
-            "--cache-http-public-key"s, injector.cache_http_public_key(),
-            "--disable-origin-access"s,
-            "--injector-ep=" + proto + ":127.0.0.1:7070"s,
-            // Bind to random ports to avoid clashes
-            "--listen-on-tcp=127.0.0.1:0"s,
-            "--front-end-ep=127.0.0.1:0"s,
-            "--trace-root=client"s,
-            "--allow-private-targets"s,
-        }));
+                "./no_client_exec"s,
+                "--log-level=DEBUG"s,
+                "--repo"s, root.make_subdir("client"s).string(),
+                "--injector-credentials"s, injector_credentials,
+                "--cache-type=bep5-http"s,
+                "--cache-http-public-key"s, injector.cache_http_public_key(),
+                "--disable-origin-access"s,
+                "--injector-ep=" + proto + ":127.0.0.1:7070"s,
+                // Bind to random ports to avoid clashes
+                "--listen-on-tcp=127.0.0.1:0"s,
+                "--front-end-ep=127.0.0.1:0"s,
+                "--trace-root=client"s,
+                "--allow-private-targets"s,
+            }),
+            [&]() {
+                return std::make_shared<MockDht>("client", yield.get_executor(), mock_dht_swarms);
+            }
+        );
+
+        auto swarm_calc = client.swarm_calculator();
+
         client.start();
 
         auto rpi = Route::DCache{CacheType::Bep5Http{}};
         // Set non-existent URL
-        auto url = util::Url::from(
-            "https://en.wikipade.io/wiki/Main_Page"s)
-        .value();
+        auto url = unwrap(util::Url::from("https://en.wikipade.io/wiki/Main_Page"s));
+
         auto rq = CacheRequestBuilder(url).set_route(rpi).build();
+
+        if (mallory) {
+            auto swarm_id = swarm_calc->swarm_id(rq["X-Ouinet-Group"]);
+            mallory->dht.tracker_announce(swarm_id, {}, yield);
+        }
+
         auto rs = unwrap(timeout(30s, [&] (Async yield) {
             return fetch_through_client(client, rq, yield);
         }, yield));
 
         BOOST_REQUIRE_EQUAL(rs.result(), http::status::bad_gateway);
         BOOST_REQUIRE(rs.body() == "Failed to retrieve the resource (after attempting all configured mechanisms)");
+
         client.stop();
     });
 }
