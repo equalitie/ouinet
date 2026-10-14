@@ -68,10 +68,14 @@ UtpOuiServiceServer::~UtpOuiServiceServer()
 
 std::expected<GenericStream, sys::error_code> UtpOuiServiceServer::accept(Async yield)
 {
+    LOG_DEBUG(yield, "YYY: uTP accept");
     auto s = _accept_queue.async_receive(yield);
+    LOG_DEBUG(yield, "YYY: uTP _accept_queue.async_receive finished");
     if (!s.has_value()) {
+        LOG_DEBUG(yield, "YYY: uTP GenericStream s failed ", s.error());
         return std::unexpected(s.error());
     }
+    LOG_DEBUG(yield, "YYY: uTP GenericStream s is set");
     return std::move(*s);
 }
 
