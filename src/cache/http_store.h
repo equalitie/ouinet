@@ -78,7 +78,7 @@ using reader_uptr = std::unique_ptr<http_response::AbstractReader>;
 // with forward slashes as path separators, without `.` or `..` components,
 // and without a final new line.
 // Such responses need to be stored using external tools.
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<void, sys::error_code>
 http_store(http_response::AbstractReader&, const fs::path&, Async);
@@ -100,7 +100,7 @@ http_store(http_response::AbstractReader&, const fs::path&, Async);
 // but cause `boost::asio::error::connection_aborted` ("Software caused connection abort")
 // when no more body data is available.
 // To detect such cases beforehand, use `http_store_body_size`.
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<reader_uptr, sys::error_code>
 http_store_reader(const fs::path& dirp, Async);
@@ -114,7 +114,7 @@ http_store_reader(const fs::path& dirp, Async);
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<reader_uptr, sys::error_code>
 http_store_reader(const fs::path& dirp, const fs::path& cdirp, Async);
@@ -134,7 +134,7 @@ http_store_reader(const fs::path& dirp, const fs::path& cdirp, Async);
 // If the range would cover data which is not stored,
 // a `boost::system::errc::invalid_seek` error is reported
 // (which may be interpreted as HTTP status `416 Range Not Satisfiable`).
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<reader_uptr, sys::error_code>
 http_store_range_reader( const fs::path& dirp
@@ -164,7 +164,7 @@ http_store_range_reader( const fs::path& dirp, const fs::path& cdirp
 // a `sys::errc::no_such_file_or_directory` error is reported.
 // If the response exists, but it is missing body data,
 // an `asio::error::no_data` error is reported.
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<std::size_t, sys::error_code>
 http_store_body_size(const fs::path& dirp, AsioExecutor);
@@ -178,16 +178,17 @@ http_store_body_size(const fs::path& dirp, AsioExecutor);
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `cdirp` itself.
 // Please make sure that `cdirp` is already in canonical form or some checks may fail.
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<std::size_t, sys::error_code>
 http_store_body_size( const fs::path& dirp, const fs::path& cdirp, AsioExecutor);
 
-OUINET_CLIENT_API
+OUINET_COMMON_API
 [[nodiscard]]
 std::expected<HashList, sys::error_code>
 http_store_load_hash_list(const fs::path&, Async);
 
+OUINET_COMMON_API
 fs::path
 path_from_resource_id(fs::path dir, const ResourceId& resource_id);
 
@@ -250,6 +251,7 @@ public:
 // (e.g. to check that they are not outside of the content directory),
 // none are performed on `content_path` itself.
 // Please make sure that `content_path` is already in canonical form or some checks may fail.
+OUINET_COMMON_API
 std::unique_ptr<BaseHttpStore>
 make_static_http_store( fs::path path, fs::path content_path
                       , sign::PublicKey
@@ -273,9 +275,11 @@ public:
     store(const ResourceId&, http_response::AbstractReader&, Async) = 0;
 };
 
+OUINET_COMMON_API
 std::unique_ptr<HttpStore>
 make_http_store(fs::path path, AsioExecutor);
 
+OUINET_COMMON_API
 std::unique_ptr<HttpStore>
 make_backed_http_store( fs::path path, std::unique_ptr<BaseHttpStore> fallback_store
                       , AsioExecutor);

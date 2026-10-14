@@ -11,7 +11,7 @@
 namespace ouinet::ouisync_service {
 
 // UDP socket backed by ouisync.
-class OuisyncSocket : public asio_utp::abstract_udp_socket {
+class OUINET_OUISYNC_API OuisyncSocket : public asio_utp::abstract_udp_socket {
 public:
     OuisyncSocket(OuisyncSocket&&) = default;
     OuisyncSocket& operator = (OuisyncSocket&&) = default;
