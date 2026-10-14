@@ -295,6 +295,7 @@ function list_artifacts_for_target_os (
 
             if [[ "$with_ouisync" == y ]]; then
                 artifacts+=(
+                  $build_dir/libcpp_ouisync_common$lib_suffix
                   $build_dir/libcpp_ouisync_client$lib_suffix
                   $build_dir/libcpp_ouisync_service$lib_suffix
                 )
