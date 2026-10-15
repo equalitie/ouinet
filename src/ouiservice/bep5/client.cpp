@@ -52,15 +52,11 @@ static
 boost::optional<asio_utp::udp_multiplexer>
 choose_multiplexer_for(bt::DhtBase& dht, const udp::endpoint& ep)
 {
-    auto eps = dht.local_endpoints();
+    auto ms = dht.udp_multiplexers();
 
-    for (auto& e : eps) {
-        if (!same_ipv(ep, e)) continue;
+    for (auto& m : ms) {
+        if (!same_ipv(ep, m.local_endpoint())) continue;
 
-        asio_utp::udp_multiplexer m(dht.get_executor());
-        sys::error_code ec;
-        m.bind(e, ec);
-        assert(!ec);
 
         return m;
     }
@@ -679,16 +675,17 @@ Bep5Client::connect(Async yield, bool use_tls, Target target)
             timer.expires_after(100ms);
             timer.async_wait([cl = std::move(concurrency_lock).value()] (auto) {});
 
-            yield.spawn([
+            yield.spawn(spawn_cancel, [
                 self = this,
                 peer,
                 use_tls,
                 &spawn_cancel,
                 &result,
                 lock = wc.lock()
-            ] (Async yield) mutable {
+            ] (Async yield_) mutable {
+                Async yield = yield_.tag(util::str(peer->swarm_type));
                 LOG_DEBUG(yield, " Connecting to ", peer->swarm_type, "; ep=", peer->endpoint, "...");
-                auto con = self->connect_single(*peer->client, use_tls, yield);
+                auto con = self->connect_single(*peer->client, use_tls, yield.tag("connect_single"));
                 if (!con) {
                     return;
                 }

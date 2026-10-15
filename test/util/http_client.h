@@ -19,7 +19,8 @@ class Client;
 asio::ssl::stream<boost::beast::tcp_stream> setup_tls_stream(asio::ip::tcp::socket, asio::ssl::context&, std::string host);
 
 std::expected<http::response<http::string_body>, sys::error_code>
-fetch_from_origin(util::Url, asio::ssl::context&, Async);
+fetch_from_origin(util::Url, asio::ssl::context&, Async,
+                  http::status expected_result = http::status::ok);
 
 std::expected<http::response<http::string_body>, sys::error_code>
 fetch_from_origin(util::Url, Async);

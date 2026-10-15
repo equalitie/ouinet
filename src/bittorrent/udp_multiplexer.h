@@ -29,7 +29,7 @@ private:
     struct SendEntry {
         std::string message;
         udp::endpoint to;
-        sys::error_code* return_ec;
+        std::shared_ptr<sys::error_code> return_ec;
         Cancel sent_signal;
     };
 
@@ -59,6 +59,10 @@ public:
 
     bool is_v4() const { return _socket.local_endpoint().address().is_v4(); }
     bool is_v6() const { return _socket.local_endpoint().address().is_v6(); }
+
+    asio_utp::udp_multiplexer inner_udp_multiplexer() const {
+        return _socket;
+    }
 
 private:
     void maintain_max_rate_bytes_per_sec( float current_rate
@@ -92,8 +96,6 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
     _rx_limit(rx_limit)
 {
     assert(_socket.is_open());
-
-    LOG_INFO("BT is operating on endpoint: UDP:", _socket.local_endpoint());
 
 #if 0
     task::spawn_detached(get_executor(), [this] (asio::yield_context yield) {
@@ -237,12 +239,12 @@ void UdpMultiplexer::send(
 ) {
     ConditionVariable condition(get_executor());
 
-    sys::error_code ec;
+    auto ec = std::make_shared<sys::error_code>();
 
     _send_queue.emplace_back();
     _send_queue.back().message = std::move(message);
     _send_queue.back().to = to;
-    _send_queue.back().return_ec = &ec;
+    _send_queue.back().return_ec = ec;
 
     auto sent_slot = _send_queue.back().sent_signal.connect([&] () {
         condition.notify();
@@ -260,10 +262,10 @@ void UdpMultiplexer::send(
     condition.wait(yield);
 
     if (cancelled || terminated) {
-        or_throw(yield, asio::error::operation_aborted);
+        *ec = asio::error::operation_aborted;
     }
 
-    return or_throw(yield, ec);
+    return or_throw(yield, *ec);
 }
 
 inline

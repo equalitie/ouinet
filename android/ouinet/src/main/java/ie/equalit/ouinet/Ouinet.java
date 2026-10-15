@@ -145,6 +145,8 @@ public class Ouinet {
         maybeAdd(args, "--enable-i2p-service-exe", config.getEnableI2pServiceExe());
         maybeAdd(args, "--enable-i2p-service-ext", config.getEnableI2pServiceExt());
         maybeAddBool(args, "--enable-i2p-service-lib", config.getEnableI2pServiceLib());
+        maybeAdd(args, "--injector-ep",            config.getInjectorEp());
+        maybeAddBool(args, "--drop-saved-opts", config.getDropSavedOpts());
 
         if (config.getLogLevel() != null) {
             args.add("--log-level=" + config.getLogLevel().name());
@@ -163,6 +165,13 @@ public class Ouinet {
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
         maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
+
+        List<String> requestFields = config.getRequestFields();
+        if (requestFields != null) {
+            for (int i = 0; i < requestFields.size(); i++) {
+                args.add("--add-request-field=" + requestFields.get(i));
+            }
+        }
 
         List<String> metricsServerUrls = config.getMetricsServerUrls();
         if (metricsServerUrls != null) {
@@ -185,9 +194,6 @@ public class Ouinet {
         }
 
         List<String> path = new ArrayList<>();
-        if (config.getObfs4ProxyPath() != null) {
-            path.add(config.getObfs4ProxyPath());
-        }
 
         Set<String> dnsProtocols = config.getDnsProtocols();
         if (dnsProtocols != null) {

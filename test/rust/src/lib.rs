@@ -42,7 +42,6 @@ mod ffi {
         fn client_new(
             ctx: Pin<&mut Context>,
             config: &[*const c_char],
-            log_tag: &str,
         ) -> Result<UniquePtr<Client>>;
         fn start(self: Pin<&mut Client>);
         fn client_stop(client: UniquePtr<Client>, completer: Box<Completer>);
@@ -53,7 +52,6 @@ mod ffi {
         fn injector_new(
             ctx: Pin<&mut Context>,
             config: &[*const c_char],
-            log_tag: &str,
         ) -> Result<UniquePtr<Injector>>;
         fn injector_stop(injector: UniquePtr<Injector>, completer: Box<Completer>);
         fn injector_cache_http_public_key(injector: &Injector) -> String;
@@ -98,9 +96,9 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(ctx: &mut Context, config: Config, log_tag: &str) -> Result<Self, anyhow::Error> {
+    pub fn new(ctx: &mut Context, config: Config) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            inner: Some(ffi::client_new(ctx.inner.pin_mut(), &config.args, log_tag)?),
+            inner: Some(ffi::client_new(ctx.inner.pin_mut(), &config.args)?),
         })
     }
 
@@ -143,12 +141,11 @@ pub struct Injector {
 }
 
 impl Injector {
-    pub fn new(ctx: &mut Context, config: Config, log_tag: &str) -> Result<Self, anyhow::Error> {
+    pub fn new(ctx: &mut Context, config: Config) -> Result<Self, anyhow::Error> {
         Ok(Self {
             inner: Some(ffi::injector_new(
                 ctx.inner.pin_mut(),
                 &config.args,
-                log_tag,
             )?),
         })
     }

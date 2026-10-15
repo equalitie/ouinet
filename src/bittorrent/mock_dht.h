@@ -25,11 +25,13 @@ public:
     MockDht(std::string name, Executor exec, std::shared_ptr<Swarms>);
     ~MockDht();
 
-    void set_endpoints(const std::set<UdpEndpoint>&) override;
+    void set_endpoints(const std::vector<asio_utp::udp_multiplexer>&) override;
 
     Promise<UdpEndpoint>::Future add_endpoint(asio_utp::udp_multiplexer) override;
 
-    std::set<UdpEndpoint> local_endpoints() const override;
+    std::vector<asio_utp::udp_multiplexer> udp_multiplexers() const override {
+        return _udp_multiplexers;
+    }
 
     std::set<UdpEndpoint> wan_endpoints() const override;
 
@@ -59,7 +61,7 @@ private:
     std::string _name;
     Executor _exec;
     std::shared_ptr<Swarms> _swarms;
-    std::set<UdpEndpoint> _local_endpoints;
+    std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
     // This peer won't find other peers with names in this filter
     std::set<std::string> _no_see_filter;
 };

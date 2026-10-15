@@ -41,6 +41,8 @@ public:
         }
     }
 
+    auto operator<=>(const Url&) const = default;
+
     OUINET_COMMON_API friend std::ostream& operator<<(std::ostream&, const Url&);
 };
 

@@ -62,14 +62,10 @@ static bool same_ipv(const udp::endpoint& ep1, const udp::endpoint& ep2)
 static
 std::optional<asio_utp::udp_multiplexer>
 choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
-                      , const set<udp::endpoint>& lan_my_eps)
+                      , const std::vector<asio_utp::udp_multiplexer>& udp_multiplexers)
 {
-    for (auto& e : lan_my_eps) {
-        if (same_ipv(ep, e)) {
-            asio_utp::udp_multiplexer m(exec);
-            sys::error_code ec;
-            m.bind(e, ec);
-            assert(!ec);
+    for (auto& m : udp_multiplexers) {
+        if (same_ipv(ep, m.local_endpoint())) {
             return m;
         }
     }
@@ -82,13 +78,13 @@ choose_multiplexer_for( AsioExecutor exec, const udp::endpoint& ep
 static
 std::expected<GenericStream, sys::error_code>
 connect( udp::endpoint ep
-       , const set<udp::endpoint>& lan_my_eps
+       , const std::vector<asio_utp::udp_multiplexer>& udp_multiplexers
        , Async yield)
 {
     sys::error_code ec;
     auto exec = yield.get_executor();
 
-    auto opt_m = choose_multiplexer_for(exec, ep, lan_my_eps);
+    auto opt_m = choose_multiplexer_for(exec, ep, udp_multiplexers);
 
 #ifdef __APPLE__
     if (!opt_m) {
@@ -421,7 +417,7 @@ struct MultiPeerReader::PreFetch {
 class MultiPeerReader::Peers {
 public:
     Peers(AsioExecutor exec
-         , set<udp::endpoint> lan_my_eps
+         , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
          , set<udp::endpoint> wan_my_eps
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
@@ -434,7 +430,7 @@ public:
         , _cv(_exec)
         , _cache_pk(std::move(cache_pk))
         , _lan_peer_eps(std::move(lan_peer_eps))
-        , _lan_my_eps(std::move(lan_my_eps))
+        , _udp_multiplexers(std::move(udp_multiplexers))
         , _wan_my_eps(std::move(wan_my_eps))
         , _resource_id(std::move(resource_id))
         , _resource_key(resource_key)
@@ -471,11 +467,12 @@ public:
                 }
 
                 // Keep looking up for peers until success or until `this` is destroyed.
-                const auto min_sleep = chrono::milliseconds(100);
+                const auto min_sleep = chrono::milliseconds(500);
                 const auto max_sleep = chrono::milliseconds(10000);
+                const auto max_try = 4;
                 auto sleep = min_sleep;
 
-                while (true) {
+                for (size_t i = 0; i < max_try; ++i) {
                     auto peer_eps = _dht_lookup->get(yield);
 
                     if (peer_eps && !peer_eps->empty()) {
@@ -504,14 +501,14 @@ public:
     }
 
     Peers(AsioExecutor exec
-         , set<udp::endpoint> lan_my_eps
+         , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
          , set<udp::endpoint> lan_peer_eps
          , sign::PublicKey cache_pk
          , const ResourceId& resource_id
          , const CryptoStreamKey& resource_key
          , std::shared_ptr<unsigned> newest_proto_seen
          , Trace trace)
-        : Peers( exec, std::move(lan_my_eps), {}, std::move(lan_peer_eps)
+        : Peers( exec, std::move(udp_multiplexers), {}, std::move(lan_peer_eps)
                , std::move(cache_pk), resource_id, resource_key, nullptr
                , std::move(newest_proto_seen), std::move(trace))
     {}
@@ -645,7 +642,7 @@ public:
                 this,
                 ep,
                 peer,
-                lan_my_eps = _lan_my_eps,
+                udp_multiplexers = _udp_multiplexers,
                 newest_proto_seen = _newest_proto_seen
             ] (Async yield) mutable {
                 LOG_DEBUG(yield, " Fetching hash list");
@@ -653,7 +650,7 @@ public:
                 auto result = timeout(
                     MultiPeerReader::BEP5_HASH_LIST_TIMEOUT,
                     [&](Async yield) -> std::expected<void, sys::error_code> {
-                        auto con = connect(ep, lan_my_eps, yield);
+                        auto con = connect(ep, udp_multiplexers, yield);
 
                         if (!con) {
                             return std::unexpected(con.error());
@@ -665,11 +662,6 @@ public:
                 );
 
                 LOG_DEBUG(yield, " Done fetching hash list; result=", debug(result));
-
-                if (result == std::unexpected(asio::error::timed_out)) {
-                    LOG_DEBUG(yield, " BEP5 hash list download timed out");
-                    return;
-                }
 
                 peer->_candidate_hook.unlink();
 
@@ -794,7 +786,7 @@ private:
 
     sign::PublicKey _cache_pk;
     std::set<asio::ip::udp::endpoint> _lan_peer_eps;
-    std::set<asio::ip::udp::endpoint> _lan_my_eps;
+    std::vector<asio_utp::udp_multiplexer> _udp_multiplexers;
     std::set<asio::ip::udp::endpoint> _wan_my_eps;
     ResourceId _resource_id;
     CryptoStreamKey _resource_key;
@@ -815,14 +807,14 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
                                 , CryptoStreamKey resource_key
                                 , sign::PublicKey cache_pk
                                 , std::set<asio::ip::udp::endpoint> lan_peer_eps
-                                , std::set<asio::ip::udp::endpoint> lan_my_eps
+                                , std::vector<asio_utp::udp_multiplexer> udp_multiplexers
                                 , std::shared_ptr<unsigned> newest_proto_seen
                                 , Trace trace)
     : _executor(ex)
     , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
-                               , std::move(lan_my_eps)
+                               , std::move(udp_multiplexers)
                                , std::move(lan_peer_eps)
                                , std::move(cache_pk)
                                , std::move(resource_id)
@@ -843,7 +835,7 @@ MultiPeerReader::MultiPeerReader( AsioExecutor ex
     , _trace(std::move(trace))
 {
     _peers = make_unique<Peers>(ex
-                               , peer_lookup->get_dht_lock()->local_endpoints()
+                               , peer_lookup->get_dht_lock()->udp_multiplexers()
                                , std::set<udp::endpoint>{}
                                , std::move(lan_peer_eps)
                                , std::move(cache_pk)
@@ -1048,7 +1040,7 @@ MultiPeerReader::async_read_part_impl(Async yield)
         return std::move(p);
     }
 
-    if (_block_id >= _reference_hash_list->blocks.size()) {
+    if (_next_block_id >= _reference_hash_list->blocks.size()) {
         mark_done();
         if (!_last_chunk_hdr_sent) {
             _last_chunk_hdr_sent = true;
@@ -1058,13 +1050,15 @@ MultiPeerReader::async_read_part_impl(Async yield)
     }
 
     while (true /* do until successful block retrieval */) {
-        auto block_e = fetch_block(_block_id, yield);
+        auto block_e = fetch_block(_next_block_id, yield);
         if (!block_e) {
             return std::unexpected(block_e.error());
         }
         auto block = std::move(*block_e);
 
-        ++_block_id;
+        auto block_id = _next_block_id;
+
+        ++_next_block_id;
 
         if (!block) {
             mark_done();
@@ -1077,10 +1071,18 @@ MultiPeerReader::async_read_part_impl(Async yield)
 
         ChunkHdr chunk_hdr{block->chunk_body.size(), std::move(_next_chunk_hdr_ext)};
 
-        _next_chunk_hdr_ext = std::move(block->chunk_hdr.exts);
+        // Do not use the `block->chunk_hdr.exts` for setting
+        // `_next_chunk_hdr_ext` because the block could have come from a
+        // different injection (have a different injection ID) and thus the
+        // chained signature would be different than the one in the
+        // `_reference_hash_list`.
+        std::string block_sig = util::base64_encode(_reference_hash_list->blocks[block_id].chained_hash_signature.bytes);
+        // https://datatracker.ietf.org/doc/html/rfc9112#section-7.1.1
+        _next_chunk_hdr_ext = ";" + http_::response_block_signature_ext + "=\"" + block_sig + "\"";
+
         _next_chunk_body = std::move(block->chunk_body);
 
-        if (_block_id == _reference_hash_list->blocks.size()) {
+        if (_next_block_id == _reference_hash_list->blocks.size()) {
             _next_trailer = std::move(block->trailer);
         }
 

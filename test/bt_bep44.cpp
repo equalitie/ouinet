@@ -184,16 +184,20 @@ int main(int argc, const char** argv)
     }
 
     vector<asio::ip::address> ifaddrs;
-    set<asio::ip::udp::endpoint> endpoints;
+    vector<asio_utp::udp_multiplexer> multiplexers;
 
     parse_args(args, &ifaddrs);
 
     for (auto addr : ifaddrs) {
         std::cout << "Spawning DHT node on " << addr << std::endl;
-        endpoints.insert({addr, 0});
+        asio_utp::udp_multiplexer m(ctx.get_executor());
+        sys::error_code ec;
+        m.bind({addr, 0}, ec);
+        assert(!ec);
+        multiplexers.push_back(std::move(m));
     }
 
-    dht->set_endpoints(endpoints);
+    dht->set_endpoints(multiplexers);
 
     task::spawn_detached(ctx, [&] (asio::yield_context yield) {
         using namespace std::chrono;

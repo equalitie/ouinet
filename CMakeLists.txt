@@ -223,6 +223,7 @@ file(GLOB ouinet_common_sources
     "./src/util/scrypt.cpp"
     "./src/util/url.cpp"
     "./src/cache/http_sign.cpp"
+    "./src/cache/chain_hasher.cpp"
     "./src/cache/signed_head.cpp"
     "./src/ssl/ca_certificate.cpp"
     "./src/ssl/util.cpp"
@@ -239,6 +240,7 @@ file(GLOB ouinet_common_sources
     "./src/error.cpp"
     "./src/http_util.cpp"
     "./src/response_reader.cpp"
+    "./src/swarm_calculator.cpp"
 )
 
 # TODO: Some low level openssl functions we use are deprecated.
@@ -372,7 +374,6 @@ if (NOT ANDROID AND NOT IOS)
     file(GLOB injector_sources
         "./src/injector.cpp"
         "./src/injector_config.cpp"
-        "./src/ouiservice/bep5/server.cpp"
         "./src/http_logger.cpp"
     )
     

@@ -70,8 +70,17 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
+    asio_utp::udp_multiplexer m(exec);
+
+    {
+        sys::error_code ec;
+        // TODO: IPv6
+        m.bind({asio::ip::make_address("0.0.0.0"), 0}, ec);
+        BOOST_REQUIRE(!ec);
+    }
+
     DhtNode dht(
-        exec,
+        std::move(m),
         metrics_dht.dht_node_ipv4(),
         std::make_shared<dns::Resolver>(),
         rx_limit,
@@ -86,9 +95,7 @@ BOOST_AUTO_TEST_CASE(test_bep_5,
 
         NodeID infohash = util::sha1_digest("ouinet-test-" + to_string(time(0)));
 
-        compat([&](Async yield) {
-            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
-        })(yield[ec]);
+        compat([&](Async yield) { return dht.start(yield); })(yield[ec]);
 
         asio::steady_timer timer(dht.get_executor());
         while (!ec && !dht.ready()) {
@@ -154,8 +161,17 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     auto metrics_dht = metrics_client.mainline_dht();
     uint32_t rx_limit = udp_mux_rx_limit_client;
 
+    asio_utp::udp_multiplexer m(exec);
+
+    {
+        sys::error_code ec;
+        // TODO: IPv6
+        m.bind({asio::ip::make_address("0.0.0.0"), 0}, ec);
+        BOOST_REQUIRE(!ec);
+    }
+
     DhtNode dht(
-        exec,
+        std::move(m),
         metrics_dht.dht_node_ipv4(),
         std::make_shared<dns::Resolver>(),
         rx_limit,
@@ -190,9 +206,7 @@ BOOST_AUTO_TEST_CASE(test_bep_44,
     size_t success_count = 0;
 
     task::spawn_detached(exec, [&] (auto yield) {
-        compat([&](Async yield) {
-            return dht.start({asio::ip::make_address("0.0.0.0"), 0}, yield); // TODO: IPv6
-        })(yield[ec]);
+        compat([&](Async yield) { return dht.start(yield); })(yield[ec]);
 
         BOOST_REQUIRE(!ec);
         BOOST_REQUIRE(dht.ready());

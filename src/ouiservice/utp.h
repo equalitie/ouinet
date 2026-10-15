@@ -9,13 +9,14 @@
 #include "api.h"
 #include "../ouiservice.h"
 
-namespace ouinet {
-namespace ouiservice {
+namespace asio_utp { class udp_multiplexer; }
+
+namespace ouinet::ouiservice {
 
 class OUINET_COMMON_API UtpOuiServiceServer : public OuiServiceImplementationServer
 {
     public:
-    UtpOuiServiceServer(asio::any_io_executor, asio::ip::udp::endpoint endpoint, Trace);
+    UtpOuiServiceServer(asio::any_io_executor, asio_utp::udp_multiplexer, Trace);
 
     [[nodiscard]]
     sys::error_code start_listen(Async) override;
@@ -65,5 +66,4 @@ class OUINET_COMMON_API UtpOuiServiceClient : public OuiServiceClient
     asio_utp::udp_multiplexer _udp_multiplexer;
 };
 
-} // ouiservice namespace
-} // ouinet namespace
+} // namespace

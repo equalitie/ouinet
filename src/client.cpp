@@ -40,6 +40,7 @@
 #include "ssl/util.h"
 #include "bittorrent/mainline_dht.h"
 #include "bep5_swarms.h"
+#include "swarm_calculator.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
@@ -125,6 +126,10 @@ public:
         , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
+
+        if (auto cache_http_pub_key = _config.cache_http_pub_key()) {
+            _swarm_calculator = std::make_shared<SwarmCalculator>(*cache_http_pub_key);
+        }
 
         // We do *not* want to do this since
         // we will not be checking certificate names,
@@ -593,7 +598,7 @@ private:
 
         _multi_utp_server = make_unique<ouiservice::MultiUtpServer>(
             _ctx.get_executor()
-            , UdpEndpoints{common_udp_multiplexer().local_endpoint()}, nullptr, _trace);
+            , std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}, nullptr, _trace);
 
         yield.tag("accept_utp").spawn([&] (Async yield) mutable {
             auto slot = yield.cancel_slot([&] () mutable {
@@ -724,6 +729,7 @@ private:
 
     shared_ptr<dns::Resolver> _dns_resolver;
     std::optional<I2pService> _i2p_service;
+    std::shared_ptr<SwarmCalculator> _swarm_calculator;
 };
 
 //------------------------------------------------------------------------------
@@ -1320,7 +1326,7 @@ Client::State::get_injector_connection(InjectingCacheType cache_type, Async yiel
 
     LOG_DEBUG(yield, " Connecting to the injector");
 
-    auto connect_e = injector->connect(yield);
+    auto connect_e = injector->connect(yield.tag("connect"));
 
     if (!connect_e) {
         LOG_WARN(yield, " Failed to connect to injector; ec=", connect_e.error());
@@ -1338,14 +1344,15 @@ Client::State::get_injector_connection(InjectingCacheType cache_type, Async yiel
 
 //------------------------------------------------------------------------------
 std::expected<Session, sys::error_code>
-Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, Async yield)
+Client::State::fetch_fresh_through_simple_proxy(PublicInjectorRequest request, Async yield_)
 {
+    Async yield = yield_.tag("public_injector");
     auto metrics = _metrics.new_public_injector_request();
 
     return timeout(
         default_timeout::fetch_http(),
         [&](Async yield) -> std::expected<Session, sys::error_code> {
-            auto con = get_injector_connection(request.cache_type(), yield);
+            auto con = get_injector_connection(request.cache_type(), yield.tag("get_injector_conn"));
             if (!con) {
                 metrics.finish(con.error());
                 return std::unexpected(con.error());
@@ -1585,7 +1592,7 @@ Client::State::maybe_wrap_in_storing_session(const CacheRequest& rq, Session res
     }
 
     return Session::create(
-            std::make_unique<StoringReader>(rq, std::move(response), cache),
+            std::make_unique<StoringReader>(rq, std::move(response), cache, yield.trace()),
             rq.header().method() == http::verb::head,
             yield);
 }
@@ -2161,13 +2168,13 @@ Client::State::setup_cache(Async yield)
     LOG_DEBUG("HTTP signing public key (Ed25519): ", _config.cache_http_pub_key());
 
     if (auto r = _config.cache_static_content_path().empty()
-        ? cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+        ? cache::Client::build( std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}
                               , *_config.cache_http_pub_key()
                                 , _config.repo_root()/"bep5_http" //TODO gives this a more inclusive name covering bothe bep5 and bep3 caches
                               , _config.max_cached_age()
                               , _config.is_local_peer_discovery_enabled()
                               , yield)
-        : cache::Client::build( UdpEndpoints{common_udp_multiplexer().local_endpoint()}
+        : cache::Client::build( std::vector<asio_utp::udp_multiplexer>{common_udp_multiplexer()}
                               , *_config.cache_http_pub_key()
                               , _config.repo_root()/"bep5_http"
                               , _config.max_cached_age()
@@ -2860,12 +2867,12 @@ std::shared_ptr<bt::DhtBase> Client::get_dht() const {
     return _state->_bt_dht;
 }
 
+std::shared_ptr<SwarmCalculator> Client::swarm_calculator() const {
+    return _state->_swarm_calculator;
+}
+
 bittorrent::NodeID Client::compute_infohash_for_resource_group(std::string_view group) const {
-    auto cache_pub_key = *_state->_config.cache_http_pub_key();
-    std::string uri_swarm_prefix = bep5::compute_uri_swarm_prefix(cache_pub_key, http_::protocol_version_current);
-    std::string swarm_name = bep5::compute_uri_swarm_name(uri_swarm_prefix, {group.begin(), group.size()});
-    util::SHA1::digest_type hash = util::sha1_digest(swarm_name);
-    return bittorrent::NodeID(hash);
+    return swarm_calculator()->swarm_id(group);
 }
 
 SysResult<I2pAddress> Client::local_i2p_address(Async yield) const {

@@ -40,7 +40,6 @@ public class Config implements Parcelable {
 
     private static final String FILE_PROTO = "file://";
     private static final String ASSET_PATH = FILE_PROTO + "/android_asset/";
-    @VisibleForTesting static final String OBFS4_PROXY = "obfs4proxy";
     private static final String OUINET_DIR = "/ouinet";
     private static final String ERROR_PAGE_FILE = "error-page.html";
 
@@ -60,6 +59,7 @@ public class Config implements Parcelable {
         private String enableI2pServiceExe;
         private String enableI2pServiceExt;
         private boolean enableI2pServiceLib = false;
+        private String injectorEp;
         private String listenOnTcp;
         private String frontEndEp;
         private String frontEndAccessToken;
@@ -80,6 +80,8 @@ public class Config implements Parcelable {
         private boolean disableInjectorAccess = false;
         private LogLevel logLevel = null;
         private boolean enableLogFile = false;
+        private boolean dropSavedOpts = false;
+        private List<String> requestFields = null;
 
         private boolean metricsEnableOnStart = false;
         // Parallel lists: one entry per metrics server, in the same order.
@@ -175,6 +177,10 @@ public class Config implements Parcelable {
             this.enableI2pServiceLib = enableI2pServiceLib;
             return this;
         }
+        public ConfigBuilder setInjectorEp(String injectorEp){
+            this.injectorEp = injectorEp;
+            return this;
+        }
         public ConfigBuilder setListenOnTcp(String listenOnTcp){
             this.listenOnTcp = listenOnTcp;
             return this;
@@ -266,6 +272,20 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableLogFile(boolean enableLogFile){
             this.enableLogFile = enableLogFile;
+            return this;
+        }
+        public ConfigBuilder setDropSavedOpts(boolean dropSavedOpts){
+            this.dropSavedOpts = dropSavedOpts;
+            return this;
+        }
+        public ConfigBuilder addRequestField(String requestField) {
+            if (requestField == null)
+                return this;
+
+            if (this.requestFields == null) {
+                this.requestFields = new ArrayList<>();
+            }
+            this.requestFields.add(requestField);
             return this;
         }
         public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
@@ -389,24 +409,6 @@ public class Config implements Parcelable {
             return Ouinet.getCARootCert(ouinetDirectory);
         }
 
-        /**
-         * Copies the objfs proxy executable from the APK assets onto the local filesystem and
-         * makes it executable.
-         * @param ouinetDirectory
-         * @return Returns the directory where the executable was placed, or null if it could not
-         * write to the file.
-         */
-        private @Nullable String setupObfs4ProxyExecutable(String ouinetDirectory) {
-            String src = ASSET_PATH + OBFS4_PROXY;
-            String dest = ouinetDirectory + "/" + OBFS4_PROXY;
-            if (copyExecutableToFile(src, dest)) {
-                Log.d(TAG, "obfs4proxy copied to " + dest);
-                return ouinetDirectory;
-            }
-            Log.d(TAG, "obfs4proxy not copied");
-            return null;
-        }
-
         private boolean copyAssetToFile(String asset, String dest){
             String dataPath = context.getApplicationInfo().dataDir;
             String dataFilePath = FILE_PROTO + dataPath;
@@ -489,7 +491,6 @@ public class Config implements Parcelable {
                     setupTlsCaCertStore(ouinetDirectory),
                     setupErrorPage(ouinetDirectory),
                     setupCaRootCert(ouinetDirectory),
-                    setupObfs4ProxyExecutable(ouinetDirectory),
                     cacheType,
                     cachePrivate,
                     cacheStaticPath,
@@ -498,6 +499,7 @@ public class Config implements Parcelable {
                     enableI2pServiceExe,
                     enableI2pServiceExt,
                     enableI2pServiceLib,
+                    injectorEp,
                     listenOnTcp,
                     frontEndEp,
                     frontEndAccessToken,
@@ -518,6 +520,8 @@ public class Config implements Parcelable {
                     disableInjectorAccess,
                     logLevel,
                     enableLogFile,
+                    dropSavedOpts,
+                    requestFields,
                     metricsEnableOnStart,
                     metricsServerUrls,
                     metricsServerTokens,
@@ -536,7 +540,6 @@ public class Config implements Parcelable {
     private String tlsCaCertStoreDir;
     private String errorPagePath;
     private String caRootCertPath;
-    private String obfs4ProxyPath;
     private String cacheType;
     private boolean cachePrivate;
     private String cacheStaticPath;
@@ -545,6 +548,7 @@ public class Config implements Parcelable {
     private String enableI2pServiceExe;
     private String enableI2pServiceExt;
     private boolean enableI2pServiceLib;
+    private String injectorEp;
     private String listenOnTcp;
     private String frontEndEp;
     private String frontEndAccessToken;
@@ -565,6 +569,8 @@ public class Config implements Parcelable {
     private boolean disableInjectorAccess;
     private LogLevel logLevel;
     private boolean enableLogFile;
+    private boolean dropSavedOpts;
+    private List<String> requestFields;
     private boolean metricsEnableOnStart;
     private List<String> metricsServerUrls;
     private List<String> metricsServerTokens;
@@ -581,7 +587,6 @@ public class Config implements Parcelable {
                   String tlsCaCertStoreDir,
                   String errorPagePath,
                   String caRootCertPath,
-                  String obfs4ProxyPath,
                   String cacheType,
                   boolean cachePrivate,
                   String cacheStaticPath,
@@ -590,6 +595,7 @@ public class Config implements Parcelable {
                   String enableI2pServiceExe,
                   String enableI2pServiceExt,
                   boolean enableI2pServiceLib,
+                  String injectorEp,
                   String listenOnTcp,
                   String frontEndEp,
                   String frontEndAccessToken,
@@ -610,6 +616,8 @@ public class Config implements Parcelable {
                   boolean disableInjectorAccess,
                   LogLevel logLevel,
                   boolean enableLogFile,
+                  boolean dropSavedOpts,
+                  List<String> requestFields,
                   boolean metricsEnableOnStart,
                   List<String> metricsServerUrls,
                   List<String> metricsServerTokens,
@@ -625,7 +633,6 @@ public class Config implements Parcelable {
         this.tlsCaCertStoreDir = tlsCaCertStoreDir;
         this.errorPagePath = errorPagePath;
         this.caRootCertPath = caRootCertPath;
-        this.obfs4ProxyPath = obfs4ProxyPath;
         this.cacheType = cacheType;
         this.cachePrivate = cachePrivate;
         this.cacheStaticPath = cacheStaticPath;
@@ -634,6 +641,7 @@ public class Config implements Parcelable {
         this.enableI2pServiceExe = enableI2pServiceExe;
         this.enableI2pServiceExt = enableI2pServiceExt;
         this.enableI2pServiceLib = enableI2pServiceLib;
+        this.injectorEp = injectorEp;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
         this.frontEndAccessToken = frontEndAccessToken;
@@ -654,6 +662,8 @@ public class Config implements Parcelable {
         this.disableInjectorAccess = disableInjectorAccess;
         this.logLevel = logLevel;
         this.enableLogFile = enableLogFile;
+        this.dropSavedOpts = dropSavedOpts;
+        this.requestFields = (requestFields == null ? null : new ArrayList<>(requestFields));
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
         this.metricsServerTokens = (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
@@ -686,9 +696,6 @@ public class Config implements Parcelable {
     public String getCaRootCertPath() {
         return caRootCertPath;
     }
-    public String getObfs4ProxyPath() {
-        return obfs4ProxyPath;
-    }
     public String getCacheType() {
         return cacheType;
     }
@@ -712,6 +719,9 @@ public class Config implements Parcelable {
     }
     public boolean getEnableI2pServiceLib() {
         return enableI2pServiceLib;
+    }
+    public String getInjectorEp() {
+        return injectorEp;
     }
     public String getListenOnTcp() {
         return listenOnTcp;
@@ -773,6 +783,12 @@ public class Config implements Parcelable {
     public boolean getEnableLogFile() {
         return enableLogFile;
     }
+    public boolean getDropSavedOpts() {
+        return dropSavedOpts;
+    }
+    public List<String> getRequestFields() {
+        return (requestFields == null ? null : new ArrayList<>(requestFields));
+    }
     public boolean getMetricsEnableOnStart() {
         return metricsEnableOnStart;
     }
@@ -821,7 +837,6 @@ public class Config implements Parcelable {
         out.writeString(tlsCaCertStoreDir);
         out.writeString(errorPagePath);
         out.writeString(caRootCertPath);
-        out.writeString(obfs4ProxyPath);
         out.writeString(cacheType);
         out.writeInt(cachePrivate ? 1 : 0);
         out.writeString(cacheStaticPath);
@@ -830,6 +845,7 @@ public class Config implements Parcelable {
         out.writeString(enableI2pServiceExe);
         out.writeString(enableI2pServiceExt);
         out.writeInt(enableI2pServiceLib ? 1 : 0);
+        out.writeString(injectorEp);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
         out.writeString(frontEndAccessToken);
@@ -851,6 +867,8 @@ public class Config implements Parcelable {
         // https://stackoverflow.com/a/48533385/273348
         out.writeInt(logLevel == null ? -1 : logLevel.ordinal());
         out.writeInt(enableLogFile ? 1 : 0);
+        out.writeInt(dropSavedOpts ? 1 : 0);
+        out.writeStringList(requestFields);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeStringList(metricsServerUrls);
         out.writeStringList(metricsServerTokens);
@@ -876,7 +894,6 @@ public class Config implements Parcelable {
         tlsCaCertStoreDir = in.readString();
         errorPagePath = in.readString();
         caRootCertPath = in.readString();
-        obfs4ProxyPath = in.readString();
         cacheType = in.readString();
         cachePrivate = in.readInt() != 0;
         cacheStaticPath = in.readString();
@@ -885,6 +902,7 @@ public class Config implements Parcelable {
         enableI2pServiceExe = in.readString();
         enableI2pServiceExt = in.readString();
         enableI2pServiceLib = in.readInt() != 0;
+        injectorEp = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
         frontEndAccessToken = in.readString();
@@ -916,6 +934,9 @@ public class Config implements Parcelable {
         logLevel = (logLevelInt == -1 ? null : LogLevel.values()[logLevelInt]);
 
         enableLogFile = in.readInt() != 0;
+        dropSavedOpts = in.readInt() != 0;
+
+        requestFields = in.createStringArrayList();
 
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrls = in.createStringArrayList();

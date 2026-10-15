@@ -5,6 +5,9 @@
 #include <util/cancel.h>
 #include <boost/asio/ip/udp.hpp>
 #include <set>
+#include <vector>
+
+namespace asio_utp { class udp_multiplexer; }
 
 namespace ouinet {
 
@@ -15,7 +18,7 @@ class LocalPeerDiscovery {
     struct Impl;
 
 public:
-    LocalPeerDiscovery(const AsioExecutor&, std::set<udp::endpoint> advertised_eps);
+    LocalPeerDiscovery(const AsioExecutor&, std::vector<asio_utp::udp_multiplexer>);
 
     LocalPeerDiscovery(const LocalPeerDiscovery&) = delete;
 

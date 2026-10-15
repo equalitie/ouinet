@@ -1,6 +1,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/ip/multicast.hpp>
 #include "local_peer_discovery.h"
+#include <asio_utp/udp_multiplexer.hpp>
 #include <util/random.h>
 #include <task.h>
 #include <parse/number.h>
@@ -270,9 +271,15 @@ set<udp::endpoint> LocalPeerDiscovery::found_peers() const
 }
 
 LocalPeerDiscovery::LocalPeerDiscovery( const AsioExecutor& ex
-                                      , set<udp::endpoint> advertised_eps)
+                                      , std::vector<asio_utp::udp_multiplexer> multiplexers)
     : _ex(ex)
 {
+    std::set<udp::endpoint> advertised_eps;
+
+    for (auto& m : multiplexers) {
+        advertised_eps.insert(m.local_endpoint());
+    }
+
     auto id = util::random::number<uint64_t>();
     _impl = make_unique<Impl>(_ex, id, advertised_eps, _lifetime_cancel);
 }

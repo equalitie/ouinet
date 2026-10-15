@@ -7,6 +7,8 @@
 #include <set>
 #include "api.h"
 
+namespace asio_utp { class udp_multiplexer; }
+
 namespace ouinet::ouiservice {
 
 class OUINET_COMMON_API MultiUtpServer : public OuiServiceImplementationServer
@@ -16,7 +18,7 @@ private:
 
 public:
     MultiUtpServer( AsioExecutor
-                  , std::set<asio::ip::udp::endpoint>
+                  , std::vector<asio_utp::udp_multiplexer>
                   , boost::asio::ssl::context* ssl_context
                   , Trace);
 

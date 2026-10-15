@@ -286,8 +286,8 @@ impl InjectorHolder {
                             "--listen-on-utp",
                             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), INJECTOR_PORT),
                         )
+                        .arg("--trace-root", "injector")
                         .flag("--bt-bootstrap-no-default"),
-                    "injector",
                 )
                 .unwrap();
 
@@ -370,7 +370,8 @@ impl ClientHolder {
                     .arg(
                         "--front-end-ep",
                         SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
-                    );
+                    )
+                    .arg("--trace-root", &name);
 
                 let config = if let Some(addr) = injector_addr {
                     config
@@ -385,7 +386,7 @@ impl ClientHolder {
                 });
 
                 let mut ctx = Context::new();
-                let mut client = Client::new(&mut ctx, config, &name).unwrap();
+                let mut client = Client::new(&mut ctx, config).unwrap();
 
                 client.start();
 
