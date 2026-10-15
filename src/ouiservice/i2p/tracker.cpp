@@ -31,21 +31,23 @@ static std::string percent_encode(const boost::string_view in) {
 
 static void fill_common_target(std::ostream& os, const NodeID& infohash, const I2pAddress& local_server_addr) {
     // As we only use bittorent protocol to announce and we do not use it for downloading the cached
-    // content we opportunistically re-randomize the peer_id on each announce least we leave 
+    // content we opportunistically re-randomize the peer_id on each announce least we leave
     // unnecessary tracking traces behind.
     auto peer_id = NodeID::random();
 
-    // Clients generally include a fake port=6881 parameter in the announce,
-    // for compatibility with older trackers. Trackers may ignore the port
-    // parameter, and should not require it.
     // "/a" is the announce path used by I2P trackers (zzzot/opentracker) to
-    // save on length.  The ip parameter is the base 64 of the client’s
-    // Destination.  Clients generally append “.i2p” to the Base 64 Destination
-    // for compatibility with older trackers.
+    // save on length. The ip parameter is the base 64 of the client's
+    // Destination with ".i2p" appended for compatibility with older trackers.
+    // port, uploaded, downloaded are required by opentracker-i2p — omitting
+    // any of them yields HTTP 400 Bad Request. port=6881 is a conventional
+    // placeholder; I2P trackers ignore the value.
     os << "/a"
        << "?info_hash=" << percent_encode(infohash.to_bytestring())
        << "&peer_id=" << percent_encode(peer_id.to_bytestring())
-       << "&ip=" << percent_encode(local_server_addr.as_str());
+       << "&port=6881"
+       << "&ip=" << percent_encode(local_server_addr.as_str() + ".i2p")
+       << "&uploaded=0"
+       << "&downloaded=0";
 }
 
 static std::string get_peers_target(const NodeID& infohash, const I2pAddress& local_server_addr) {
