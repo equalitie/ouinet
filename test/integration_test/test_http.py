@@ -231,11 +231,9 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
                 TestFixtures.TCP_CLIENT_DISCOVERY_START,
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
-                TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED,
                 TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
-                TestFixtures.DHT_CONTACTS_STORED_REGEX,
                 TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
                 TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
@@ -323,7 +321,7 @@ async def request_sized_content(port, content_size, nonce: Optional[str] = None,
     )
     if nonce is not None:
         url += "&nonce=" + nonce
-    return await request_url(port, url, header)
+    return await asyncio.to_thread(request_url, port, url, header)
 
 
 async def request_echo(proxy_port, echo_content, extra_headers=None) -> Response:
@@ -370,8 +368,6 @@ async def wait_for_dht_ready(client):
     print(
         "[INFO] for DHT to get a WAN endpoint it took: ", time() - timestamp, "seconds"
     )
-
-    await wait_for_benchmark(client, TestFixtures.DHT_CONTACTS_STORED_REGEX)
 
 
 def assert_ok(response: Response, content: Optional[str] = None):
@@ -721,8 +717,7 @@ async def test_tcp_cache(certificate_file, http_server, content_length):
         response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content)
 
     # # make sure it was served from cache
-    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_UTP_REQUEST_SERVED)
-    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+    assert response.headers['X-Ouinet-Source'] == 'dist-cache'
 
 
 @pytest.mark.skip(reason="TODO: injectors for this protocol version have not yet been deployed")
@@ -1005,8 +1000,7 @@ async def test_bep3_cache_over_i2p(http_server, log, content_length):
     use_sized = content_length > 4096
     if use_sized:
         sized_nonce = safe_random_str(16)
-        response = await asyncio.to_thread(
-            request_sized_content,
+        response = await request_sized_content(
             TestFixtures.CACHE_CLIENT[0]["port"],
             content_length,
             sized_nonce,

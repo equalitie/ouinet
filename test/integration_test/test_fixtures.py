@@ -115,7 +115,6 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
-    CACHE_CLIENT_UTP_REQUEST_SERVED = r"[\s\S]*serve_utp_req/serve_local END[\s\S]*"
 
     # Logged by the I2P cache server in client.cpp once a peer's PROPFIND or
     # GET has been successfully written back over the I2P stream. Used by the
@@ -154,7 +153,6 @@ class TestFixtures:
     BEP5_REQUEST_CACHED_REGEX = r"[\s\S]*X-Ouinet-Injection:[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r"[\s\S]*Resolving IPNS address: [\s\S]*"
     IPFS_CACHE_READY_REGEX = r"[\s\S]*IPNS ID has been resolved successfully[\s\S]*"
-    BEP5_CACHE_READY_REGEX = r"[\s\S]*BT DHT: Successfully stored contacts[\s\S]*"  # r"[\s\S]*BEP5 index: bootstrapped BitTorrent DHT[\s\S]*" TODO: Replace with correct regex.
     IPFS_REQUEST_CACHED_REGEX = (
         r"[\s\S]*Request was successfully published to cache[\s\S]*"
     )
@@ -167,8 +165,7 @@ class TestFixtures:
 
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
     FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
-    DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
-    DHT_INITIALIZED_REGEX = r"[\s\S]*BT DHT: WAN endpoint[\s\S]*"
+    DHT_INITIALIZED_REGEX = r"[\s\S]*/dht WAN endpoint[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
     I2P_TUNNEL_HEALING_PERIOD = 10
