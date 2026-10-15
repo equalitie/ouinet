@@ -53,26 +53,13 @@ if IS_I2P_BUILD:
 else:
     print("i2p is not enabled, testing without it")
 
-def path_to_i2pd_executable() -> str:
-    """Returns path to the i2pd executable"""
-    return join(os.environ.get("OUINET_BUILD_DIR"), "i2pd")
-
-
-DEFAULT_EXTERNAL_I2P_SAM_ENDPOINT = "127.0.0.1:7656"
-
-# Pass these arguments to either the client or the injector binaries. At least
-# one of the three arguments must be passed for the binary to start the I2P
-# service.
-# TODO: Currently the `-exe` and `-lib` will attempt to start the service on the
-# default SAM port. This means that only one of the binaries can start the service
-# and the others need to connect to it using the `-ext` option.
-I2P_SERVICE_ARGS= [
-    # Attempt to connect to an external I2P service running SAM interface on
-    # the given endpoint.
-    "--enable-i2p-service-ext", DEFAULT_EXTERNAL_I2P_SAM_ENDPOINT,
-    # The binary will attempt to start the `i2pd` binary as a subprocess.
-    # Ouinet must be compiled with WITH_I2PD_EXE for it to work.
-    "--enable-i2p-service-exe", path_to_i2pd_executable(),
+# Pass these arguments to either the client or the injector binaries so each
+# process starts its own i2pd (compiled in).
+# We stick to `-lib` only: `-ext` would make processes share a SAM endpoint
+# make several unrealitic shortcut optimizations possible, for example 
+# skiping the real DHT lookup for the other party's LeaseSet (Java
+# i2p already has this shortcut, i2pd does not yet).
+I2P_SERVICE_ARGS = [
     # The binary will attempt to start `i2pd` in the same process.
     # Ouinet must be compiled with WITH_I2PD_LIB for it to work.
     "--enable-i2p-service-lib", "true",
@@ -793,8 +780,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
     )  # "--disable-cache"
 
     # wait for the I2P service to become available
-    i2p_service_sam_endpoint = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     # wait for the injector session to be created
     injector_i2p_public_id = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)).group(1)
@@ -821,8 +807,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
             "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
             "--injector-ep",
             "i2p:" + injector_i2p_public_id,
-            # Connect to the I2P service started by `i2pinjector`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
             "--i2p-hops-per-tunnel",
             str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
         ],
@@ -866,8 +851,7 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
     print("Index key is: " + index_key)
 
     # wait for the I2P service to become available
-    i2p_service_sam_endpoint = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     # wait for the I2P session tunnel to be created
     injector_i2p_public_id = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)).group(1)
@@ -897,8 +881,7 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
             "--cache-private",
             "--cache-http-public-key", index_key,
             "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-            # Connect to the I2P service started by `i2pinjector`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
             "--injector-ep", "i2p:" + injector_i2p_public_id,
             "--i2p-hops-per-tunnel",
             str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
@@ -981,8 +964,7 @@ async def test_bep3_cache_over_i2p(http_server, log):
         ],
     )
 
-    i2p_service_sam_endpoint = (await wait_for_benchmark(client, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(client, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
@@ -1031,8 +1013,7 @@ async def test_bep3_cache_over_i2p(http_server, log):
             TestFixtures.BEP3_TRACKER_ID,
             "--disable-origin-access",
             "--disable-proxy-access",
-            # Connect to the I2P service started by the `client`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
             "--front-end-ep",

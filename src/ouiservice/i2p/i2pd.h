@@ -46,9 +46,15 @@ public:
         std::vector<std::string> to_vector(Type) const;
     
     private:
-        // TODO: Bind to a random port (0)
-        uint16_t sam_port = 7656;
+        // Make shift random high port picking for the SAM TCP bridge
+        //
+        // While the idiomatic way is to set this to 0 to let the OS pick a port.
+        // i2pd has bug in SAMBridge: sam.portudp is always `portTCP - 1` by default
+        // (even when portTCP is 0) which wraps to 65535 for every instance.
+        // We can change this back to 0 when the bug is resolved
         //uint16_t sam_port = 0;
+        static uint16_t pick_random_sam_port();
+        uint16_t sam_port = pick_random_sam_port();
         fs::path i2pd_root_dir;
     };
 

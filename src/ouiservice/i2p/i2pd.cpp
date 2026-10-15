@@ -5,7 +5,17 @@
 #include "util/overloaded.h"
 #include "logger.h"
 
+#include <random>
+
 namespace ouinet {
+
+uint16_t I2pd::Config::pick_random_sam_port() {
+    // Range picked to stay out of well-known/registered ports and to leave
+    // headroom above 1 for the UDP port that i2pd derives as `portTCP - 1`.
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<uint16_t> dist(10000, 60000);
+    return dist(rng);
+}
 
 std::vector<std::string> I2pd::Config::to_vector(I2pd::Type type) const {
     using namespace std::string_literals;
