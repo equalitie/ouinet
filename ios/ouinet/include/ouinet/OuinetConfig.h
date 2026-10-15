@@ -10,6 +10,8 @@
 
 - (OuinetConfig*)setInjectorTlsCert:(NSString*)cert;
 
+- (OuinetConfig*)setTlsCaCertCn:(NSString*)cn;
+
 - (OuinetConfig*)setCacheType:(NSString*)type;
 
 - (OuinetConfig*)setListenOnTcp:(NSString*)address;
@@ -40,7 +42,37 @@
 
 - (OuinetConfig*)setDisableDoH:(BOOL)value;
 
+- (OuinetConfig*)setDisableUpnp:(BOOL)value;
+
+- (OuinetConfig*)setDisableLocalPeerDiscovery:(BOOL)value;
+
 - (OuinetConfig*)setLogLevel:(NSString*)level;
+
+- (OuinetConfig*)setEnableLogFile:(BOOL)value;
+
+- (OuinetConfig*)setBtBootstrapExtras:(NSArray<NSString*>*)extras;
+
+- (OuinetConfig*)setClientCredentials:(NSString*)credentials;
+
+- (OuinetConfig*)setProxyAccessToken:(NSString*)token;
+
+- (OuinetConfig*)setCachePrivate:(BOOL)value;
+
+- (OuinetConfig*)setCacheStaticPath:(NSString*)path;
+
+- (OuinetConfig*)setCacheStaticContentPath:(NSString*)path;
+
+- (OuinetConfig*)setMaxCachedAge:(NSString*)maxCachedAge;
+
+- (OuinetConfig*)setRequestBodyLimit:(NSString*)limit;
+
+- (OuinetConfig*)setLocalDomain:(NSString*)domain;
+
+- (OuinetConfig*)setDnsProtocols:(NSArray<NSString*>*)protocols;
+
+- (OuinetConfig*)setUdpMuxPort:(NSString*)port;
+
+- (OuinetConfig*)setUdpMuxRxLimit:(NSString*)limit;
 
 - (NSString*)getOuinetDirectory;
 
@@ -51,6 +83,8 @@
 - (NSString*)getInjectorTlsCertPath;
 
 - (NSString*)getTlsCaCertStoreDir;
+
+- (NSString*)getTlsCaCertCn;
 
 - (NSString*)getCacheType;
 
@@ -66,7 +100,7 @@
 
 - (NSString*)getMetricsServerToken;
 
-- (NSString*)getMetricsServerTlsCaCertPath;
+- (NSString*)getMetricsServerTlsCaCert;
 
 - (NSString*)getMetricsEncryptionKey;
 
@@ -83,5 +117,37 @@
 - (BOOL)getDisableBridgeAnnouncement;
 
 - (BOOL)getDisableDoH;
+
+- (BOOL)getDisableUpnp;
+
+- (BOOL)getDisableLocalPeerDiscovery;
+
+- (BOOL)getEnableLogFile;
+
+- (NSString*)getLogFilePath;
+
+- (NSArray<NSString*>*)getBtBootstrapExtras;
+
+- (NSString*)getClientCredentials;
+
+- (NSString*)getProxyAccessToken;
+
+- (BOOL)getCachePrivate;
+
+- (NSString*)getCacheStaticPath;
+
+- (NSString*)getCacheStaticContentPath;
+
+- (NSString*)getMaxCachedAge;
+
+- (NSString*)getRequestBodyLimit;
+
+- (NSString*)getLocalDomain;
+
+- (NSArray<NSString*>*)getDnsProtocols;
+
+- (NSString*)getUdpMuxPort;
+
+- (NSString*)getUdpMuxRxLimit;
 
 @end

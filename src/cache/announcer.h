@@ -3,7 +3,7 @@
 #include "../bittorrent/bep5_announcer.h"
 #include "../util/hash.h"
 #include "../util/executor.h"
-#include "../util/log_path.h"
+#include "../util/trace.h"
 #include "namespaces.h"
 #include <memory>
 
@@ -34,7 +34,7 @@ public:
     Bep5Announcer(
         std::shared_ptr<bittorrent::DhtBase>,
         size_t simultaneous_announcements,
-        util::LogPath log_path
+        Trace trace
     );
     ~Bep5Announcer();
 };

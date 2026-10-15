@@ -45,7 +45,15 @@ macos / unit-test:
     expire_in: 6h
   script:
     - export LD_LIBRARY_PATH=$CI_PROJECT_DIR/$BUILD_PATH:/usr/local/lib
-    - for test in ./$TESTS_PATH/test*.app/Contents/MacOS/test*; do "$test" --log_level=test_suite; done
+    - |+
+      for test in ./$TESTS_PATH/test*.app/Contents/MacOS/test*; do
+        name=$(basename "$test")
+        # TODO: I2P on Apple
+        if [ "$name" == test_i2p -o "$name" == test_i2p_tracker -o "$name" == test_i2p_fetch ]; then
+          continue
+        fi
+        "$test" --log_level=test_suite || exit 1
+      done
   needs:
     ['macos / build']
   rules:

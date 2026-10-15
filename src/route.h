@@ -4,6 +4,7 @@
 #include "cache_type.h"
 #include "api.h"
 
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/http/message.hpp>
 
 #include <ostream>
@@ -16,14 +17,15 @@ class ClientConfig;
 struct Route {
     struct FrontEnd                       {};
     struct Origin                         {};
-    struct BlindInjector                  { InjectingCacheType cache_type; };
-    struct OriginOrBlindInjector          { InjectingCacheType cache_type; };
-    struct PublicInjector                 { InjectingCacheType cache_type; };
-    struct DCache                         { CacheType          cache_type; };
-    struct OriginOrDCache                 { CacheType          cache_type; };
-    struct OriginOrPublicInjector         { InjectingCacheType cache_type; };
-    struct PublicInjectorOrDCache         { InjectingCacheType cache_type; };
-    struct OriginOrPublicInjectorOrDCache { InjectingCacheType cache_type; };
+    struct BlindInjector                  { InjectingCacheType cache_type;    };
+    struct OriginOrBlindInjector          { InjectingCacheType cache_type;    };
+    struct PublicInjector                 { InjectingCacheType cache_type;    };
+    struct DCache                         { CacheType          cache_type;    };
+    struct OriginOrDCache                 { CacheType          cache_type;    };
+    struct OriginOrPublicInjector         { InjectingCacheType cache_type;    };
+    struct PublicInjectorOrDCache         { InjectingCacheType cache_type;    };
+    struct OriginOrPublicInjectorOrDCache { InjectingCacheType cache_type;    };
+    struct ExternalProxy                  { asio::ip::tcp::endpoint proxy_ep; };
 
     using Alternatives = std::variant<
         FrontEnd,
@@ -35,7 +37,8 @@ struct Route {
         OriginOrDCache,
         OriginOrPublicInjector,
         PublicInjectorOrDCache,
-        OriginOrPublicInjectorOrDCache
+        OriginOrPublicInjectorOrDCache,
+        ExternalProxy
     >;
 
     Route(Route const&) = default;

@@ -33,6 +33,7 @@ if (WITH_OUISYNC)
         )
     endif()
 
+    target_link_libraries(cpp_ouisync_common  PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_client  PRIVATE ouinet_asio)
 

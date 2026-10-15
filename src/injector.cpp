@@ -32,7 +32,9 @@
 #include "session.h"
 
 #include "ouiservice.h"
-#include "ouiservice/i2p/util/create_i2p_session.h"
+#include "ouiservice/i2p/service.h"
+#include "ouiservice/i2p/session.h"
+#include "ouiservice/i2p/destination_keypair.h"
 #include "ouiservice/tcp.h"
 #include "ouiservice/utp.h"
 #include "ouiservice/tls.h"
@@ -43,6 +45,7 @@
 #include "util/atomic_file.h"
 #include "util/bytes.h"
 #include "util/file_io.h"
+#include "util/spawn_for_result.h"
 
 #include "logger.h"
 #include "defer.h"
@@ -66,13 +69,74 @@ using uuid_generator = boost::uuids::random_generator_mt19937;
 using Request     = http::request<http::string_body>;
 using Response    = http::response<http::dynamic_body>;
 using util::AsioExecutor;
+template<class V> using SysResult = std::expected<V, sys::error_code>;
+using I2pSessionTask = TaskHandle<SysResult<I2pSession>>;
 
 static const fs::path OUINET_TLS_CERT_FILE = "tls-cert.pem";
 static const fs::path OUINET_TLS_KEY_FILE = "tls-key.pem";
 static const fs::path OUINET_TLS_DH_FILE = "tls-dh.pem";
 
 struct Injector::Inner {
-    std::optional<CreateI2pSessionPromise::Future> _i2p_session_future;
+    Trace _trace;
+    std::optional<I2pService> _i2p_service;
+    std::optional<I2pSessionTask> _i2p_session_task;
+
+    I2pService* get_or_create_i2p_service(asio::any_io_executor exec, const I2pService::Config& config, Cancel cancel) {
+        if (cancel) {
+            return nullptr;
+        }
+
+        if (_i2p_service) {
+            return &*_i2p_service;
+        }
+
+        _i2p_service = I2pService::start(config, exec, cancel, _trace);
+        return &*_i2p_service;
+    }
+
+    I2pSessionTask get_or_create_i2p_session(asio::any_io_executor exec, const InjectorConfig& config, Cancel cancel) {
+        using R = SysResult<I2pSession>;
+
+        if (_i2p_session_task) return *_i2p_session_task;
+
+        _i2p_session_task = spawn_for_result(exec, cancel, _trace, [this, &config] (Async yield) -> R {
+            auto cfg = config.i2p_service_config();
+
+            if (!cfg) {
+                return std::unexpected(asio::error::service_not_found);
+            }
+
+            auto service = get_or_create_i2p_service(yield.get_executor(), *cfg, yield.get_cancel());
+
+            if (!service) return std::unexpected(asio::error::service_not_found);
+
+            auto keypair = config.load_i2p_destination_keypair();
+
+            std::optional<I2pSession> session;
+
+            if (!keypair) {
+                auto s = _i2p_service->create_session(yield);
+                if (!s) return std::unexpected(s.error());
+                config.store_i2p_destination_keypair(s->destination_keypair());
+                session = std::move(*s);
+            }
+            else {
+                auto s = _i2p_service->create_session(std::move(*keypair), yield);
+                if (!s) return std::unexpected(s.error());
+                session = std::move(*s);
+            }
+
+            // Used by python test
+            {
+                auto b32 = session->local_addr().to_b32();
+                LOG_DEBUG(yield, " I2P Session created, local_addr: ", b32);
+            }
+
+            return std::move(*session);
+        });
+
+        return *_i2p_session_task;
+    }
 };
 
 // TODO: Get rid of this
@@ -152,8 +216,8 @@ resolve_target( const http::request_header<>& req
     auto [host, port] = std::move(*host_port);
 
     // First test trivial cases (like "localhost" or "127.1.2.3").
-    bool local = boost::regex_match(host, util::localhost_rx);
-    bool priv = boost::regex_match(host, util::private_addr_rx);
+    bool local = util::is_localhost_addr(host);
+    bool priv = util::is_private_addr(host);
 
     // Resolve address and also use result for more sophisticaded checking.
     if ((!local && !priv) || allow_private_targets)
@@ -171,11 +235,9 @@ resolve_target( const http::request_header<>& req
     // Test non-trivial cases (like "[0::1]" or FQDNs pointing to loopback).
     for (auto r : lookup)
     {
-        if ((local = boost::regex_match(r.endpoint().address().to_string()
-                                        , util::localhost_rx)))
+        if ((local = util::is_localhost_addr(r.endpoint().address().to_string())))
             break;
-        if ((priv = boost::regex_match(r.endpoint().address().to_string()
-                                      , util::private_addr_rx)))
+        if ((priv = util::is_private_addr(r.endpoint().address().to_string())))
             if (!allow_private_targets)
                 break;
     }
@@ -828,13 +890,14 @@ void listen( InjectorConfig& config
 Injector::Injector(
         InjectorConfig config,
         asio::io_context& ctx,
-        util::LogPath log_path,
         std::shared_ptr<bittorrent::MockDht> mock_dht) :
     _exec(ctx.get_executor()),
     _config(std::move(config)),
     _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config())),
-    _inner(std::make_unique<Inner>())
+    _inner(std::make_unique<Inner>(_config.trace_root()))
 {
+    auto trace = _inner->_trace;
+
     #ifndef __WIN32
     if (_config.open_file_limit()) {
         increase_open_file_limit(*_config.open_file_limit());
@@ -849,11 +912,11 @@ Injector::Injector(
         , _config.repo_root() / OUINET_TLS_DH_FILE );
 
     if (!_config.is_proxy_enabled())
-        LOG_INFO(log_path, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
+        LOG_INFO(trace, " Proxy disabled, not serving plain HTTP/HTTPS proxy requests");
     if (auto target_rx_o = _config.target_rx())
-        LOG_INFO(log_path, " Target URIs restricted to regular expression: ", *target_rx_o);
+        LOG_INFO(trace, " Target URIs restricted to regular expression: ", *target_rx_o);
     if (_config.is_private_target_allowed()) {
-        LOG_INFO(log_path, " Allowing injection of private targets.");
+        LOG_INFO(trace, " Allowing injection of private targets.");
         g_allow_private_targets = true;
     }
     LOG_INFO( "DNS protocols enabled: ["
@@ -864,7 +927,7 @@ Injector::Injector(
 
     if (_config.tcp_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_endpoint();
-        LOG_INFO(log_path, " TCP address: ", endpoint);
+        LOG_INFO(trace, " TCP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-tcp"
                                , util::str(endpoint));
@@ -880,7 +943,7 @@ Injector::Injector(
 
     if (_config.tcp_tls_endpoint()) {
         tcp::endpoint endpoint = *_config.tcp_tls_endpoint();
-        LOG_INFO(log_path, " TCP/TLS address: ", endpoint);
+        LOG_INFO(trace, " TCP/TLS address: ", endpoint);
         util::create_state_file( _config.repo_root()/"endpoint-tcp-tls"
                                , util::str(endpoint));
 
@@ -890,12 +953,12 @@ Injector::Injector(
 
     if (_config.utp_endpoint()) {
         udp::endpoint endpoint = *_config.utp_endpoint();
-        LOG_INFO(log_path, " uTP address: ", endpoint);
+        LOG_INFO(trace, " uTP address: ", endpoint);
 
         util::create_state_file( _config.repo_root()/"endpoint-utp"
                                , util::str(endpoint));
 
-        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
+        auto srv = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
         proxy_server->add(std::move(srv));
     }
 
@@ -903,18 +966,18 @@ Injector::Injector(
 
         udp::endpoint endpoint = *_config.utp_tls_endpoint();
 
-        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, log_path);
+        auto base = make_unique<ouiservice::UtpOuiServiceServer>(_exec, endpoint, trace);
 
         auto local_ep = base->local_endpoint();
 
         if (local_ep) {
-            LOG_INFO(log_path, " uTP/TLS address: ", *local_ep);
+            LOG_INFO(trace, " uTP/TLS address: ", *local_ep);
             util::create_state_file( _config.repo_root()/"endpoint-utp-tls"
                                    , util::str(*local_ep));
             proxy_server->add(make_unique<ouiservice::TlsOuiServiceServer>(_exec, std::move(base), *_ssl_context));
 
         } else {
-            LOG_ERROR(log_path, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
+            LOG_ERROR(trace, " Failed to start uTP/TLS service on ", *_config.utp_tls_endpoint());
         }
     }
 
@@ -930,7 +993,7 @@ Injector::Injector(
             bt::bootstrap::Config()
                 .with_default(!_config.bt_bootstrap_no_default())
                 .with_extras(_config.bt_bootstrap_extras()),
-            log_path.tag("dht")
+            trace.tag("dht")
         );
 
         if (_config.bt_allow_martians()) {
@@ -945,13 +1008,13 @@ Injector::Injector(
     assert(!_dht->local_endpoints().empty());
 
     if (_dht->local_endpoints().empty())
-        LOG_ERROR(log_path, " Failed to bind the BitTorrent DHT to any local endpoint");
+        LOG_ERROR(trace, " Failed to bind the BitTorrent DHT to any local endpoint");
 
     proxy_server->add(make_unique<ouiservice::Bep5Server>(
         _dht,
         _ssl_context.get(),
         _config.bep5_injector_swarm_name(),
-        log_path
+        trace
     ));
 
     if (_config.listen_on_i2p()) {
@@ -963,57 +1026,48 @@ Injector::Injector(
             void stop_listen() override { _cancel(); }
 
             std::expected<GenericStream, sys::error_code> accept(Async yield) override {
-                auto future_result = _session_future.wait(yield);
+                auto& s = _session_task.wait_ref(yield);
 
-                if (!future_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
-                }
-                auto& create_result = future_result.value();
-                if (!create_result.has_value()) {
-                    return std::unexpected(asio::error::fault);
+                if (!s) {
+                    LOG_WARN(_trace, " I2P session was not created");
+                    return std::unexpected(s.error());
                 }
 
-                auto session = *create_result;
-
-                auto result = session->accept(yield);
+                auto result = s->accept(yield);
 
                 if (!result.has_value()) {
-                    LOG_WARN("Failed to accept I2P connection");
-                    return std::unexpected(result.error().code());
+                    LOG_WARN(_trace, " Failed to accept I2P connection");
+                    return std::unexpected(result.error());
                 }
 
                 return std::move(*result);
             }
 
-            Server(CreateI2pSessionPromise::Future  session_future, Cancel cancel, util::LogPath log_path):
-                _session_future(std::move(session_future)),
-                _cancel(std::move(cancel)),
-                _log_path(std::move(log_path))
+            Server(I2pSessionTask session_task, Trace trace):
+                _session_task(std::move(session_task)),
+                _trace(std::move(trace))
             {}
 
-            CreateI2pSessionPromise::Future _session_future;
-            Cancel _cancel;
-            util::LogPath _log_path;
+            I2pSessionTask _session_task;
+            LifetimeCancel _cancel;
+            Trace _trace;
         };
 
-        _inner->_i2p_session_future = create_i2p_session(_cancel, log_path, _exec);
-
         proxy_server->add(std::make_unique<Server>(
-            *_inner->_i2p_session_future,
-            _cancel,
-            log_path
+            _inner->get_or_create_i2p_session(_exec, _config, _cancel),
+            trace
         ));
     }
 
-    LOG_INFO(log_path, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
+    LOG_INFO(trace, " HTTP signing public key (Ed25519): ", _config.cache_private_key().public_key());
 
     task::spawn_detached(_exec, [
         this,
         proxy_server = std::move(proxy_server),
         cancel = _cancel,
-        log_path
+        trace
     ] (asio::yield_context yield) mutable {
-        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, log_path));
+        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, trace));
     });
 }
 
@@ -1031,21 +1085,13 @@ Injector::~Injector() {
 }
 
 std::expected<I2pAddress, sys::error_code> Injector::i2p_address(Async yield) {
-    if (!_inner->_i2p_session_future) {
-        return std::unexpected(asio::error::service_not_found);
-    }
+    auto session_task = _inner->get_or_create_i2p_session(_exec, _config, _cancel);
 
-    auto future_result = _inner->_i2p_session_future->wait(yield);
+    auto& result = session_task.wait_ref(yield);
 
-    if (!future_result.has_value()) {
-        return std::unexpected(future_result.error());
-    }
-    auto create_result = future_result.value();
-    if (!create_result.has_value()) {
-        return std::unexpected(create_result.error());
-    }
+    if (!result) return std::unexpected(result.error());
 
-    return (*create_result)->local_addr();
+    return result->local_addr();
 }
 
 } // namespace ouinet

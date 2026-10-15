@@ -74,11 +74,16 @@ function exe (
         shift
     done
 
-    opts=($opt_w $opt_i $opt_t ${opt_e[@]/#/'-e '} $container_name)
+    opt_env=()
+    for v in "${opt_e[@]}"; do
+      opt_env+=(-e "$v")
+    done
+
+    opts=($opt_w $opt_i $opt_t "${opt_env[@]}" $container_name)
 
     case "$util_container_os" in
         linux)
-            dock exec ${opts[@]} "$@"
+            dock exec "${opts[@]}" "$@"
             ;;
         windows)
             dock exec ${opts[@]} bash -c "$*"

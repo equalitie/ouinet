@@ -37,7 +37,7 @@ public:
                                                        , rx_limit
                                                        , boost::filesystem::path{}
                                                        , bt::bootstrap::Config{}
-                                                       , util::LogPath{});
+                                                       , Trace{});
         auto& mpl = common_udp_multiplexer();
 
         asio_utp::udp_multiplexer m(_ctx);

@@ -851,8 +851,6 @@ BOOST_DATA_TEST_CASE( test_http_flush_verified_partial
         // Test the loaded response.
         yield.spawn([ signed_r = std::move(signed_r), &tested_w
                     , lock = wc.lock()] (auto y) mutable {
-            Cancel cancel;
-            sys::error_code e;
             auto pk = get_public_key();
             Session::reader_uptr signed_rvr = make_unique<cache::VerifyingReader>
                 ( std::move(signed_r), pk

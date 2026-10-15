@@ -21,6 +21,9 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(len(response)))
+        # Match the echo path so BEP5/BEP3 cache clients treat the response as
+        # cacheable
+        self.send_header("Cache-Control", "public, max-age=3600, immutable")
         self.end_headers()
         self.wfile.write(response)
 
@@ -50,6 +53,9 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(response_body)))
+        # Mark as cacheable so the ouinet cache client treats the response as
+        # cachable
+        self.send_header("Cache-Control", "public, max-age=3600, immutable")
         self.end_headers()
         self.wfile.write(response_body)
 

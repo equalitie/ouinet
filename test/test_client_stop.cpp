@@ -86,9 +86,7 @@ BOOST_AUTO_TEST_CASE(test_client_start_stop) {
             // Bind to random ports to avoid clashes
             "--listen-on-tcp=127.0.0.1:0"s,
             "--front-end-ep=127.0.0.1:0"s,
-        }),
-        util::LogPath("client")
-        );
+        }));
 
     // Clients are started explicitly
     client.start();

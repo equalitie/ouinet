@@ -10,6 +10,7 @@ namespace ouinet::util::random {
 OUINET_COMMON_API void data(void*, size_t);
 OUINET_COMMON_API std::string string(size_t size);
 OUINET_COMMON_API std::string printable_ascii(size_t size);
+OUINET_COMMON_API std::string from_set(size_t size, std::string_view set);
 
 template<typename N /* e.g. uint64_t */>
 inline N number()

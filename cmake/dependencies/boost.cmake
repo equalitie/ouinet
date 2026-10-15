@@ -13,6 +13,7 @@ if (${BOOST_VERSION} GREATER_EQUAL 1.87.0)
 endif ()
 
 set(BOOST_COMPONENTS
+    atomic
     context
     ${BOOST_COROUTINE_BACKEND}
     date_time
@@ -24,6 +25,7 @@ set(BOOST_COMPONENTS
     system
     unit_test_framework
     url
+    json
 )
 
 if (NOT IOS)
@@ -186,7 +188,11 @@ foreach (patch ${BOOST_PATCHES})
     set(BOOST_PATCH_COMMAND ${BOOST_PATCH_COMMAND} && patch --dry-run -R -N -p1 -i ${patch} || patch -N -p1 -i ${patch})
 endforeach()
 
-execute_process(COMMAND nproc OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NPROC)
+include(ProcessorCount)
+ProcessorCount(NPROC)
+if (NPROC EQUAL 0)
+    set(NPROC 1)
+endif()
 
 string(REPLACE ";" " " OUINET_BOOST_CXXFLAGS_STR "${OUINET_BOOST_CXXFLAGS}")
 

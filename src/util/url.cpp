@@ -38,4 +38,8 @@ std::optional<Url> Url::from(const boost::string_view url_s) {
     };
 }
 
+std::ostream& operator<<(std::ostream& os, const Url& url) {
+    return os << url.reassemble();
+}
+
 } // namespace ouinet::util

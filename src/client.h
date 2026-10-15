@@ -8,7 +8,7 @@
 #include "api.h"
 #include "client_config.h"
 #include "bittorrent/mock_dht.h"
-#include "util/log_path.h"
+#include "util/trace.h"
 
 namespace ouinet {
 
@@ -32,13 +32,14 @@ public:
         Stopped,  // told to stop, all operations succeeded (final)
     };
 
-    static boost::filesystem::path get_or_gen_ca_root_cert(const std::string repo_root);
+    static boost::filesystem::path get_or_gen_ca_root_cert(
+            const std::string repo_root,
+            const std::string cn = "Your own local Ouinet client");
 
     Client(
         asio::io_context&,
         ClientConfig,
         // For use in tests
-        util::LogPath log_path = {},
         std::optional<MockDhtBuilder> dht_builder = {});
 
     ~Client();

@@ -104,7 +104,6 @@ int main(int argc, char* argv[]) {
                 "--disable-injector-access",
                 "--disable-proxy-access",
             }),
-            util::LogPath("client"),
             [&ctx, swarms] () {
                 return std::make_shared<MockDht>("client", ctx.get_executor(), swarms);
             });

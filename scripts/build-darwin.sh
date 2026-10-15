@@ -89,12 +89,78 @@ function combine {
                 "${ROOT}/ios/ouinet/include" \
                 "${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework" 
             
+            # Bundle each slice's dSYM only when it exists: a Debug build whose
+            # DEBUG_INFORMATION_FORMAT is plain "dwarf" produces no .dSYM, and
+            # passing a missing -debug-symbols path makes xcodebuild fail.
+            OUINET_OS64=${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework
+            OUINET_SIM=${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework
+            OUINET_XCF_ARGS=(-framework "${OUINET_OS64}")
+            [[ -d "${OUINET_OS64}.dSYM" ]] && \
+                OUINET_XCF_ARGS+=(-debug-symbols "${OUINET_OS64}.dSYM")
+            OUINET_XCF_ARGS+=(-framework "${OUINET_SIM}")
+            [[ -d "${OUINET_SIM}.dSYM" ]] && \
+                OUINET_XCF_ARGS+=(-debug-symbols "${OUINET_SIM}.dSYM")
+            rm -rf ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
             xcodebuild -create-xcframework \
-                -framework ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework \
-                -debug-symbols ${DIR}/build-os64/${BUILD_TYPE}-iphoneos/ouinet.framework.dSYM \
-                -framework ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework \
-                -debug-symbols ${DIR}/build-simulatorarm64/${BUILD_TYPE}-iphonesimulator/ouinet.framework.dSYM \
+                "${OUINET_XCF_ARGS[@]}" \
                 -output ${DIR}/${OUTPUT_DIR}/ouinet.xcframework
+
+            # ouinet.framework loads asio_utp as a shared library at runtime
+            # (@rpath/asio_utp.framework/asio_utp). It is built as its own
+            # framework (see CMakeLists.txt) and shipped in a companion
+            # xcframework that the app must embed & sign alongside
+            # ouinet.xcframework.
+            # Select the real framework bundle (one that actually contains the
+            # Mach-O binary), skipping Xcode's EagerLinkingTBDs stub frameworks.
+            ASIO_UTP_OS64=$(find ${DIR}/build-os64 -type d -name asio_utp.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/asio_utp' ';' -print | head -1)
+            ASIO_UTP_SIM=$(find ${DIR}/build-simulatorarm64 -type d -name asio_utp.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/asio_utp' ';' -print | head -1)
+            if [[ -d "${ASIO_UTP_OS64}" && -d "${ASIO_UTP_SIM}" ]]; then
+                # Bundle the dSYMs (generated next to each framework) so the
+                # xcframework carries symbols for crash symbolication, matching
+                # ouinet.xcframework.
+                ASIO_UTP_XCF_ARGS=(-framework "${ASIO_UTP_OS64}")
+                [[ -d "${ASIO_UTP_OS64}.dSYM" ]] && \
+                    ASIO_UTP_XCF_ARGS+=(-debug-symbols "${ASIO_UTP_OS64}.dSYM")
+                ASIO_UTP_XCF_ARGS+=(-framework "${ASIO_UTP_SIM}")
+                [[ -d "${ASIO_UTP_SIM}.dSYM" ]] && \
+                    ASIO_UTP_XCF_ARGS+=(-debug-symbols "${ASIO_UTP_SIM}.dSYM")
+                rm -rf ${DIR}/${OUTPUT_DIR}/asio_utp.xcframework
+                xcodebuild -create-xcframework \
+                    "${ASIO_UTP_XCF_ARGS[@]}" \
+                    -output ${DIR}/${OUTPUT_DIR}/asio_utp.xcframework
+            else
+                echo "ERROR: asio_utp.framework not found for both platforms" \
+                     "(os64='${ASIO_UTP_OS64}' sim='${ASIO_UTP_SIM}'); build both before combining" >&2
+                exit 1
+            fi
+
+            # ouinet.framework also loads ouinet_common as a shared library at
+            # runtime (@rpath/ouinet_common.framework/ouinet_common). Like
+            # asio_utp it is built as its own framework (see CMakeLists.txt) and
+            # shipped in a companion xcframework that the app must embed & sign
+            # alongside ouinet.xcframework.
+            OUINET_COMMON_OS64=$(find ${DIR}/build-os64 -type d -name ouinet_common.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/ouinet_common' ';' -print | head -1)
+            OUINET_COMMON_SIM=$(find ${DIR}/build-simulatorarm64 -type d -name ouinet_common.framework \
+                ! -path '*/EagerLinkingTBDs/*' -exec test -f '{}/ouinet_common' ';' -print | head -1)
+            if [[ -d "${OUINET_COMMON_OS64}" && -d "${OUINET_COMMON_SIM}" ]]; then
+                OUINET_COMMON_XCF_ARGS=(-framework "${OUINET_COMMON_OS64}")
+                [[ -d "${OUINET_COMMON_OS64}.dSYM" ]] && \
+                    OUINET_COMMON_XCF_ARGS+=(-debug-symbols "${OUINET_COMMON_OS64}.dSYM")
+                OUINET_COMMON_XCF_ARGS+=(-framework "${OUINET_COMMON_SIM}")
+                [[ -d "${OUINET_COMMON_SIM}.dSYM" ]] && \
+                    OUINET_COMMON_XCF_ARGS+=(-debug-symbols "${OUINET_COMMON_SIM}.dSYM")
+                rm -rf ${DIR}/${OUTPUT_DIR}/ouinet_common.xcframework
+                xcodebuild -create-xcframework \
+                    "${OUINET_COMMON_XCF_ARGS[@]}" \
+                    -output ${DIR}/${OUTPUT_DIR}/ouinet_common.xcframework
+            else
+                echo "ERROR: ouinet_common.framework not found for both platforms" \
+                     "(os64='${OUINET_COMMON_OS64}' sim='${OUINET_COMMON_SIM}'); build both before combining" >&2
+                exit 1
+            fi
         else
             echo "ERROR: ${DIR}/build-iphonesimulator not found, please build before combining frameworks"
             exit 1

@@ -16,17 +16,11 @@ BUILD="$2"
 # DIR_NAME;AUTHORS;LICENSE
 LICENSE_DATA="\
 ouinet;eQualit.ie, Inc.;${SRC}/LICENSE
-obfs4proxy;Yawning Angel;${BUILD}/modules/obfs4proxy/obfs4proxy-prefix/src/obfs4proxy/LICENSE
 boost;various;${BUILD}/boost/src/built_boost/LICENSE_1_0.txt
-golang;${BUILD}/golang/AUTHORS;${BUILD}/golang/LICENSE
 i2pd;The PurpleI2P Project;${SRC}/src/ouiservice/i2p/i2pd/LICENSE
-gpg-error;${BUILD}/gpg_error/src/gpg_error/AUTHORS;${BUILD}/gpg_error/src/gpg_error/COPYING.LIB
-gcrypt;${BUILD}/gcrypt/src/gcrypt/AUTHORS;${BUILD}/gcrypt/src/gcrypt/COPYING.LIB
 json;Niels Lohmann;${BUILD}/json/src/json/LICENSE.MIT
-uri;Glyn Matthews;${BUILD}/uri/src/uri/LICENSE_1_0.txt
-asio-utp;Peter Jankuliak;${SRC}/modules/asio-utp/LICENSE.txt
-lampshade;various;${BUILD}/src/ouiservice/lampshade/lampshade-prefix/src/lampshade/LICENSE
-zdnsparser;various;${SRC}/scripts/licenses/Apache-2.0
+asio-utp;eQualit.ie, Inc;${SRC}/modules/asio-utp/LICENSE
+cpp-upnp;eQualit.ie, Inc;${SRC}/modules/cpp-upnp/LICENSE
 "
 
 echo "$LICENSE_DATA" | (

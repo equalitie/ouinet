@@ -27,6 +27,16 @@
 #include "../util/hash.h"
 #include "../util/quantized_buffer.h"
 #include "../util/variant.h"
+#include <boost/regex.hpp>
+
+namespace ouinet::http_ {
+    OUINET_COMMON_API bool is_signature_header(const boost::string_view s) {
+        // The corresponding regular expression, capturing the number.
+        static const boost::regex response_signature_hdr_rx( response_signature_hdr_pfx + "([0-9]+)"
+                                                           , boost::regex::normal|boost::regex::icase);
+        return boost::regex_match(s.begin(), s.end(), response_signature_hdr_rx);
+    }
+}
 
 namespace ouinet { namespace cache {
 
@@ -87,7 +97,7 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
 {
     auto thn = th.name_string();
     auto thv = th.value();
-    if (!boost::regex_match(thn.begin(), thn.end(), http_::response_signature_hdr_rx)) {
+    if (!http_::is_signature_header(thn)) {
         head.insert(th.name(), thn, thv);
         return;
     }
@@ -107,7 +117,7 @@ insert_trailer(const http::fields::value_type& th, http::response_header<>& head
     for (auto hit = head.begin(); hit != head.end();) {
         auto hn = hit->name_string();
         auto hv = hit->value();
-        if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)) {
+        if (!http_::is_signature_header(hn)) {
             ++hit;
             continue;
         }
@@ -919,7 +929,7 @@ struct VerifyingReader::Impl {
         for (const auto& h : intr) {
             auto hn = h.name_string();
             _head.insert(h.name(), hn, h.value());
-            if (boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+            if (http_::is_signature_header(hn))
                 sigs_in_trailer = true;
         }
         if (sigs_in_trailer) {
@@ -1059,7 +1069,7 @@ KeepSignedReader::async_read_part(Async yield)
         }
         for (const auto& h : *headp) {  // get set of signed headers
             auto hn = h.name_string();
-            if (!boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx))
+            if (!http_::is_signature_header(hn))
                 continue;  // not a signature header
             auto hsig = HttpSignature::parse(h.value());
             assert(hsig);  // no invalid signatures should have been passed
@@ -1069,8 +1079,7 @@ KeepSignedReader::async_read_part(Async yield)
         for (auto hit = headp->begin(); hit != headp->end();) {  // remove unsigned (except sigs)
             auto hn = std::string(hit->name_string());
             boost::algorithm::to_lower(hn);  // signed headers are lower-case
-            if ( !boost::regex_match(hn.begin(), hn.end(), http_::response_signature_hdr_rx)
-            && keep_headers.find(hn) == keep_headers.end()) {
+            if ( !http_::is_signature_header(hn) && keep_headers.find(hn) == keep_headers.end()) {
                 LOG_DEBUG("Filtering out unsigned header: ", hn);
                 hit = headp->erase(hit);
             } else ++hit;

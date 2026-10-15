@@ -2,12 +2,16 @@
 
 #include <vector>
 #include <boost/nowide/fstream.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include "bep5_swarms.h"
 #include "parse/endpoint.h"
 #include "http_logger.h"
 #include "logger.h"
 #include "constants.h"
 #include "ssl/util.h"
+#include "config/i2p_service.h"
+
+auto i2p_destination_keypair_file_name = "i2p_destination_keypair.json";
 
 namespace ouinet {
 
@@ -41,6 +45,10 @@ boost::program_options::options_description InjectorConfig::options_description(
          , "Max rate limit that's allowed for incoming packets to the "
            "UDP multiplexer. The value is expressed in Kbps. To leave it "
            "unlimited, set it to zero.")
+        ("trace-root"
+         , po::value<string>()
+         , "Tracing prefix added to log lines, useful when debugging multiple "
+           "clients and/or injectors writing log into the same output")
 
         // Injector options
         ("open-file-limit"
@@ -88,6 +96,8 @@ boost::program_options::options_description InjectorConfig::options_description(
          , "Ed25519 private key for cache-related signatures (hex-encoded)")
         ;
 
+    add_i2p_service_options(desc);
+
     return desc;
 }
 
@@ -123,6 +133,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("trace-root")) {
+        _trace_root = vm["trace-root"].as<string>();
+    }
 
     if (vm.count("help")) {
         _is_help = true;
@@ -321,6 +335,8 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
             if (ec) throw error("Failed to load origin CA certificate from \"", verify_file, "\"");
         }
     }
+
+    _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
 }
 
 void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
@@ -345,6 +361,28 @@ void InjectorConfig::setup_ed25519_private_key(const std::string& hex)
     _ed25519_private_key = *sign::SecretKey::from_hex(hex);
     boost::nowide::ofstream(priv_config) << _ed25519_private_key;
     boost::nowide::ofstream(pub_config)  << _ed25519_private_key.public_key();
+}
+
+std::optional<I2pDestinationKeypair> InjectorConfig::load_i2p_destination_keypair() const {
+    auto keypair_path = _repo_root / i2p_destination_keypair_file_name;
+
+    if (!fs::exists(keypair_path)) {
+        return {};
+    }
+
+    fs::ifstream ifs(keypair_path);
+    std::stringstream buffer;
+    buffer << ifs.rdbuf();
+
+    auto keypair = I2pDestinationKeypair::from_json_string(buffer.str());
+    if (!keypair) throw std::runtime_error(util::str("Failed to read ", keypair_path));
+
+    return std::move(*keypair);
+}
+
+void InjectorConfig::store_i2p_destination_keypair(const I2pDestinationKeypair& keypair) const {
+    fs::ofstream ofs(_repo_root / i2p_destination_keypair_file_name);
+    ofs << keypair.to_json_string();
 }
 
 } // namespace ouinet

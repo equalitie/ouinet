@@ -39,11 +39,11 @@ public class Ouinet {
             System.loadLibrary("gpg-error");
             System.loadLibrary("gcrypt");
 
-            System.loadLibrary("client");
+            System.loadLibrary("ouinet_client");
             System.loadLibrary("native-lib");
         } else {
             ReLinkerInstance relinker = ReLinker.recursively();
-            relinker.loadLibrary(context, "client");
+            relinker.loadLibrary(context, "ouinet_client");
             relinker.loadLibrary(context, "native-lib");
         }
 
@@ -141,6 +141,10 @@ public class Ouinet {
         maybeAdd(args, "--cache-type",             config.getCacheType());
         maybeAdd(args, "--cache-static-repo",      config.getCacheStaticPath());
         maybeAdd(args, "--cache-static-root",      config.getCacheStaticContentPath());
+        maybeAdd(args, "--i2p-bep3-tracker",       config.getI2pBep3Tracker());
+        maybeAdd(args, "--enable-i2p-service-exe", config.getEnableI2pServiceExe());
+        maybeAdd(args, "--enable-i2p-service-ext", config.getEnableI2pServiceExt());
+        maybeAddBool(args, "--enable-i2p-service-lib", config.getEnableI2pServiceLib());
 
         if (config.getLogLevel() != null) {
             args.add("--log-level=" + config.getLogLevel().name());
@@ -152,15 +156,26 @@ public class Ouinet {
         maybeAddBool(args, "--disable-injector-access",     config.getDisableInjectorAccess());
         maybeAddBool(args, "--cache-private",               config.getCachePrivate());
         maybeAddBool(args, "--disable-bridge-announcement", config.getDisableBridgeAnnouncement());
+        maybeAddBool(args, "--disable-upnp",                config.getDisableUpnp());
+        maybeAddBool(args, "--disable-local-peer-discovery", config.getDisableLocalPeerDiscovery());
         maybeAdd    (args, "--request-body-limit",          config.getRequestBodyLimit());
 
         maybeAddBool(args, "--metrics-enable-on-start",     config.getMetricsEnableOnStart());
-        maybeAdd    (args, "--metrics-server-url",          config.getMetricsServerUrl());
-        maybeAdd    (args, "--metrics-server-token",        config.getMetricsServerToken());
         maybeAdd    (args, "--metrics-encryption-key",      config.getMetricsEncryptionKey());
-        maybeAdd    (args, "--metrics-server-cacert",       config.getMetricsServerTlsCaCert());
-        maybeAdd    (args, "--metrics-server-cacert-file",  config.getMetricsServerTlsCaCertPath());
         maybeAdd    (args, "--metrics-delete-after",        config.getMetricsDeleteAfter());
+
+        List<String> metricsServerUrls = config.getMetricsServerUrls();
+        if (metricsServerUrls != null) {
+            List<String> metricsServerTokens = config.getMetricsServerTokens();
+            List<String> metricsServerCaCerts = config.getMetricsServerCaCerts();
+            List<Integer> metricsServerPriorities = config.getMetricsServerPriorities();
+            for (int i = 0; i < metricsServerUrls.size(); i++) {
+                args.add("--metrics-server-url=" + metricsServerUrls.get(i));
+                args.add("--metrics-server-token=" + metricsServerTokens.get(i));
+                args.add("--metrics-server-cacert=" + metricsServerCaCerts.get(i));
+                args.add("--metrics-server-priority=" + metricsServerPriorities.get(i));
+            }
+        }
 
         Set<String> btBootstrapExtras = config.getBtBootstrapExtras();
         if (btBootstrapExtras != null) {

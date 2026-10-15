@@ -154,7 +154,7 @@ I2pAnnouncer::I2pAnnouncer(std::shared_ptr<I2pTrackerClient> tracker):
                 Async(
                     yield,
                     state->cancel,
-                    util::LogPath("I2pAnnouncer")));
+                    Trace("I2pAnnouncer")));
         });
 }
 

@@ -1,5 +1,6 @@
 #include "random.h"
 #include <random>
+#include <exception>
 
 namespace ouinet::util::random {
 
@@ -33,6 +34,26 @@ std::string printable_ascii(size_t size) {
     std::string s(size, '\0');
     data(s.data(), s.size(), uint8_t(' '), uint8_t('~'));
     return s;
+}
+
+std::string from_set(size_t size, std::string_view set) {
+    std::string ret(set.size(), '\0');
+
+    if (size == 0 && set.size() == 0) {
+        return ret;
+    }
+
+    if (set.size() == 0) {
+        std::terminate();
+    }
+
+    std::uniform_int_distribution<std::mt19937::result_type> dist(0, set.size() - 1);
+
+    for (auto& c : ret) {
+        c = set[dist(g_rng)];
+    }
+
+    return ret;
 }
 
 template<typename N> N number(N min, N max) {

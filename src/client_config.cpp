@@ -1,3 +1,5 @@
+#include <map>
+
 #include <boost/optional/optional_io.hpp>
 #include <boost/program_options.hpp>
 #include "client_config.h"
@@ -9,47 +11,21 @@
 #include "util/debug.h"
 #include "util/overloaded.h"
 #include "util/str.h"
+#include "config/util.h"
+#include "config/i2p_service.h"
 #ifndef __WIN32
 #include "increase_open_file_limit.h"
 #endif
 
 namespace ouinet {
 
+namespace po = boost::program_options;
+
 #define _LOG_FILE_NAME "log.txt"
 static const fs::path log_file_name{_LOG_FILE_NAME};
 
 #define _DEFAULT_STATIC_CACHE_SUBDIR ".ouinet"
 static const fs::path default_static_cache_subdir{_DEFAULT_STATIC_CACHE_SUBDIR};
-
-template <class... Args>
-inline
-std::runtime_error error(Args && ...args) {
-    return std::runtime_error(util::str(std::forward<Args>(args)...));
-}
-
-// Helper to avoid writing the name of the option twice.
-template<typename T>
-static boost::optional<T> as_optional(const boost::program_options::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return boost::none;
-    } else {
-        return v.as<T>();
-    }
-}
-
-// Helper for extracting multiple values
-template<typename T>
-static std::vector<T> as_vector(const boost::program_options::variables_map& vm, const char* name) {
-    auto v = vm[name];
-
-    if (v.empty()) {
-        return std::vector<T>();
-    } else {
-        return v.as<std::vector<T>>();
-    }
-}
 
 bool ClientConfig::EnabledCaches::get(CacheType type) const {
     return std::visit(overloaded {
@@ -83,7 +59,6 @@ asio::ssl::context load_tls_client_ctx_from_string(const std::string& ctx_str, c
 boost::program_options::options_description ClientConfig::description_full()
 {
     using namespace std;
-    namespace po = boost::program_options;
 
     po::options_description general("General options");
     general.add_options()
@@ -110,6 +85,10 @@ boost::program_options::options_description ClientConfig::description_full()
           "This option is persistent.")
        ("bt-allow-martians", po::bool_switch()->default_value(false)
         , "Allow BitTorrent DHT peers with invalid or suspicious endpoints. Useful mostly for testing.")
+       ("trace-root"
+        , po::value<string>()
+        , "Tracing prefix added to log lines, useful when debugging multiple "
+          "clients and/or injectors writing log into the same output")
 #ifndef __WIN32
        ("open-file-limit"
         , po::value<unsigned int>()
@@ -122,6 +101,9 @@ boost::program_options::options_description ClientConfig::description_full()
        ("listen-on-tcp"
         , po::value<string>()->default_value("127.0.0.1:8077")
         , "HTTP proxy endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+        ("https-proxy"
+        , po::bool_switch(&_https_proxy)->default_value(false)
+        , "Create a HTTPS proxy instead of HTTP")
        ("udp-mux-port"
        , po::value<uint16_t>()
        , "Port used by the UDP multiplexer in BEP5 and uTP interactions.")
@@ -131,14 +113,28 @@ boost::program_options::options_description ClientConfig::description_full()
          "UDP multiplexer. The value is expressed in Kbps. To leave it "
          "unlimited, set it to zero.")
        ("client-credentials", po::value<string>()
-        , "<username>:<password> authentication pair for the client")
+        , "<username>:<password> authentication pair for proxy-auth."
+          "Environment variable CLIENT_CREDENTIALS overrides this arguments")
+       ("frontend-credentials", po::value<string>()
+        , "<username>:<password> authentication pair for frontend's www-auth."
+         "Environment variable FRONTEND_CREDENTIALS overrides this arguments")
        ("tls-ca-cert-store-dir", po::value<string>(&_tls_ca_cert_store_dir)
         , "Path to the CA certificate store directory")
        ("tls-ca-cert-store-file", po::value<vector<string>>(&_tls_ca_cert_store_files)
         , "Add CA certificate store file")
+       ("tls-ca-cert-cn", po::value<string>(&_tls_ca_cert_cn)
+        , "Common Name (CN) to use for the generated root CA certificate. "
+          "Only applied when the CA certificate is first generated; "
+          "delete the existing CA cert/key/dh files to regenerate with a new name.")
        ("front-end-ep"
         , po::value<string>()->default_value("127.0.0.1:8078")
         , "Front-end's endpoint (in <IP>:<PORT> format). Set port to 0 for random port assigned by OS.")
+       ("https-frontend"
+        , po::bool_switch(&_https_frontend)->default_value(false)
+        , "Serve Frontend on HTTPS instead of HTTP")
+       ("require-post"
+        , po::bool_switch(&_frontend_post)->default_value(false)
+        , "Accept only POST requests for frontend methods which modify state.")
         ("front-end-unix-socket-ep"
         , po::value<string>()
         , "Path to the front-end Unix socket. Absolute or relative to repo root.")
@@ -154,6 +150,14 @@ boost::program_options::options_description ClientConfig::description_full()
         , po::bool_switch(&_disable_bridge_announcement)->default_value(false)
         , "Disable BEP5 announcements of this client to the Bridges list in the DHT. "
           "Previous announcements could take up to an hour to expire.")
+       ("disable-upnp"
+        , po::bool_switch(&_disable_upnp)->default_value(false)
+        , "Disable UPnP IGD port mapping used to open the UDP port on the "
+          "gateway for BitTorrent/uTP connectivity.")
+       ("disable-local-peer-discovery"
+        , po::bool_switch(&_disable_local_peer_discovery)->default_value(false)
+        , "Disable discovery of and announcement to other Ouinet clients "
+          "on the local network (LAN) via UDP multicast.")
        ("request-body-limit"
         , po::value<uint64_t>()->default_value(_max_req_body_size)
         , "Set the max size of body requests in KiB. This could be "
@@ -166,6 +170,8 @@ boost::program_options::options_description ClientConfig::description_full()
           "Ouinet processes it. Useful for testing when using e.g. Firefox "
           "as the UA.")
        ;
+
+    add_i2p_service_options(services);
 
     po::options_description injector("Injector options");
     injector.add_options()
@@ -281,6 +287,15 @@ boost::program_options::options_description ClientConfig::description_full()
           "To read the certificate from a file, set this option to the path to the file prefixed with '@' "
           "(example: '@/path/to/cert'). "
           "To use default certificates for all servers, this option can be omitted.")
+       ("metrics-server-priority", po::value<std::vector<int>>()->composing()
+        , "Priority tier for the metrics server: servers with a lower value are tried first. "
+          "The record is sent concurrently to every server in the highest-priority tier that "
+          "has at least one server; the next tier is only contacted if every server in the "
+          "current tier fails to receive the record. "
+          "This option must be specified once for each server specified with --metrics-server-url. "
+          "To use the default priority for a particular server, set this option to '0'. "
+          "To use the default priority for all servers (a single tier, same as if this option "
+          "was never used), this option can be omitted.")
        ("metrics-encryption-key", po::value<string>()
         , "Key to encrypt metrics records with. To generate the (public) encryption key, you can use "
           "the following. \n"
@@ -311,8 +326,6 @@ boost::program_options::options_description ClientConfig::description_full()
 // with no defaults nor descriptions.
 boost::program_options::options_description ClientConfig::description_saved()
 {
-    namespace po = boost::program_options;
-
     po::options_description desc;
     desc.add_options()
         ("log-level", po::value<std::string>())
@@ -362,6 +375,10 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("trace-root")) {
+        _trace_root = vm["trace-root"].as<string>();
+    }
 
     if (vm.count("help")) {
         _is_help = true;
@@ -458,6 +475,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _local_ep = *opt_local_ep;
     }
+    if (!_https_proxy) {
+        LOG_WARN("HTTP proxy is deprecated. Migrate to --https-proxy");
+    }
 
     if (auto opt = as_optional<uint16_t>(vm, "udp-mux-port")) {
         _udp_mux_port = *opt;
@@ -502,6 +522,9 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
         _front_end_endpoint = *opt_fe_ep;
     }
+    if (!_https_frontend) {
+        LOG_WARN("HTTP frontend is deprecated. Migrate to --https-frontend");
+    }
 
     if (auto opt = as_optional<string>(vm, "front-end-unix-socket-ep")) {
         if (opt->empty()) {
@@ -519,6 +542,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--front-end-access-token must not be an empty string");
         }
         _front_end_access_token = *opt;
+        LOG_WARN("front-end-access-token is deprecated. Migrate to --frontend-credentials and www-auth");
     }
 
     if (auto opt = as_optional<string>(vm, "proxy-access-token")) {
@@ -526,6 +550,7 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
             throw error("--proxy-access-token must not be an empty string");
         }
         _proxy_access_token = *opt;
+        LOG_WARN("proxy-access-token is deprecated. Migrate to --client-credentials and proxy-auth");
     }
 
     if (auto opt = as_optional<bool>(vm, "disable-bridge-announcement")) {
@@ -548,17 +573,27 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
         }
     }
 
-    if (auto opt = as_optional<string>(vm, "client-credentials")) {
-        auto cred = *opt;
-
-        if (!cred.empty() && cred.find(':') == string::npos) {
-            throw error(
-                "The '--client-credentials' argument expects a string "
-                "in the format <username>:<password>, but the provided "
-                "string is missing a colon: ", cred);
-        }
-
-        _client_credentials = std::move(cred);
+    if (const char *env_var = std::getenv("CLIENT_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _client_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "client-credentials"); opt && !opt->empty()) {
+        _client_credentials = std::move(*opt);
+    }
+    if (!_client_credentials.empty() && _client_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--client-credentials' argument or CLIENT_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _client_credentials);
+    }
+    if (const char *env_var = std::getenv("FRONTEND_CREDENTIALS"); env_var != nullptr && env_var[0] != '\0') {
+        _frontend_credentials = env_var;
+    } else if (auto opt = as_optional<string>(vm, "frontend-credentials"); opt && !opt->empty()) {
+        _frontend_credentials = std::move(*opt);
+    }
+    if (!_frontend_credentials.empty() && _frontend_credentials.find(':') == string::npos) {
+        throw error(
+            "The '--frontend-credentials' argument or FRONTEND_CREDENTIALS env variable expects a string "
+            "in the format <username>:<password>, but the provided "
+            "string is missing a colon: ", _frontend_credentials);
     }
 
     auto maybe_set_pk = [&] (const string& opt_name, auto& pk) {
@@ -618,14 +653,6 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
                     if (!_cache_http_pubkey) {
                         throw std::runtime_error(
                             "'--cache-type=bep3-http-over-i2p' must be used with '--cache-http-public-key'");
-                    }
-
-                    auto& injector_ep = _injector_endpoints.get<CacheType::Bep5Http>();
-
-                    if (!injector_ep) {
-                        injector_ep = Endpoint::Bep5{
-                            bep5::compute_injector_swarm_name(*_cache_http_pubkey, http_::protocol_version_current)
-                        };
                     }
                 },
                 [&] (const CacheType::Ouisync& type) {
@@ -767,13 +794,32 @@ ClientConfig::ClientConfig(int argc, const char* argv[])
 
     _metrics = MetricsConfig::parse(vm);
 
+    _i2p_service_config = parse_i2p_service_config(vm, _repo_root);
+
     save_persistent();  // only if no errors happened
+}
+
+std::vector<std::vector<MetricsServerConfig*>>
+group_servers_by_priority(std::vector<MetricsServerConfig>& servers)
+{
+    std::map<int, std::vector<MetricsServerConfig*>> by_priority;
+    for (auto& server_conf : servers) {
+        by_priority[server_conf.priority].push_back(&server_conf);
+    }
+
+    std::vector<std::vector<MetricsServerConfig*>> tiers;
+    tiers.reserve(by_priority.size());
+    for (auto& [priority, tier_servers] : by_priority) {
+        tiers.push_back(std::move(tier_servers));
+    }
+    return tiers;
 }
 
 std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options::variables_map& vm) {
     auto raw_server_urls = as_vector<std::string>(vm, "metrics-server-url");
     auto raw_server_tokens = as_vector<std::string>(vm, "metrics-server-token");
     auto raw_server_cacerts = as_vector<std::string>(vm, "metrics-server-cacert");
+    auto raw_server_priorities = as_vector<int>(vm, "metrics-server-priority");
 
     if (!raw_server_urls.empty()) {
         if (!raw_server_tokens.empty() && raw_server_tokens.size() != raw_server_urls.size()) {
@@ -793,6 +839,15 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
                 raw_server_urls.size(), ") or zero"
             );
         }
+
+        if (!raw_server_priorities.empty() && raw_server_priorities.size() != raw_server_urls.size()) {
+            throw error(
+                "Wrong number of occurrences of --metrics-server-priority (",
+                raw_server_priorities.size(),
+                ") - it must be the same as the number of occurrences of --metrics-server-url (",
+                raw_server_urls.size(), ") or zero"
+            );
+        }
     } else {
         if (!raw_server_tokens.empty()) {
             throw error("--metrics-server-token can only be used together with --metrics-server-url");
@@ -801,13 +856,20 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
         if (!raw_server_cacerts.empty()) {
             throw error("--metrics-server-cacert can only be used together with --metrics-server-url");
         }
+
+        if (!raw_server_priorities.empty()) {
+            throw error("--metrics-server-priority can only be used together with --metrics-server-url");
+        }
     }
 
     std::vector<MetricsServerConfig> servers;
-    for (int i = 0; i < raw_server_urls.size(); ++i) {
+    for (size_t i = 0; i < raw_server_urls.size(); ++i) {
         auto raw_url = std::move(raw_server_urls[i]);
         auto raw_token = i < raw_server_tokens.size() ? std::move(raw_server_tokens[i]) : "";
         auto raw_cacert = i < raw_server_cacerts.size() ? std::move(raw_server_cacerts[i]) : "";
+        auto priority = i < raw_server_priorities.size()
+                       ? raw_server_priorities[i]
+                       : default_metrics_server_priority;
 
         auto url = util::Url::from(raw_url);
         if (!url) {
@@ -830,16 +892,17 @@ std::unique_ptr<MetricsConfig> MetricsConfig::parse(const boost::program_options
             auto name = util::str("metrics server ", url->reassemble());
 
             if (raw_cacert.starts_with("@")) {
-                cacert = load_tls_client_ctx_from_string(raw_cacert.substr(1), name);
+                cacert = load_tls_client_ctx_from_file(raw_cacert.substr(1), name);
             } else {
-                cacert = load_tls_client_ctx_from_file(raw_cacert, name);
+                cacert = load_tls_client_ctx_from_string(raw_cacert, name);
             }
         }
 
         servers.emplace_back(
             std::move(*url),
             std::move(token),
-            std::move(cacert)
+            std::move(cacert),
+            priority
         );
     }
 

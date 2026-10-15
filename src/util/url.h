@@ -2,12 +2,14 @@
 
 #include <string>
 #include <optional>
+#include <ostream>
 #include <boost/utility/string_view.hpp>
 #include "api.h"
 
 namespace ouinet::util {
 
-struct OUINET_COMMON_API Url {
+class OUINET_COMMON_API Url {
+public:
     // Uniform Resource Identifier (URI): Generic Syntax
     // https://www.ietf.org/rfc/rfc3986.txt
 
@@ -38,6 +40,8 @@ struct OUINET_COMMON_API Url {
             return host + ':' + port;
         }
     }
+
+    OUINET_COMMON_API friend std::ostream& operator<<(std::ostream&, const Url&);
 };
 
 } // namespace ouinet::util

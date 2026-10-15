@@ -174,7 +174,7 @@ int main(int argc, const char** argv)
         rx_limit,
         boost::filesystem::path{},
         bootstrap::Config{},
-        util::LogPath{}
+        Trace{}
     );
 
     vector<string> args;

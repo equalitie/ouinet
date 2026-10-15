@@ -14,7 +14,7 @@ using namespace std;
 
 UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
                                         , udp::endpoint local_endpoint
-                                        , util::LogPath log_path):
+                                        , Trace trace):
     _ex(std::move(ex)),
     _udp_multiplexer(new asio_utp::udp_multiplexer(_ex)),
     _accept_queue(_ex)
@@ -24,10 +24,10 @@ UtpOuiServiceServer::UtpOuiServiceServer( asio::any_io_executor ex
     _udp_multiplexer->bind(local_endpoint, ec);
 
     if (ec) {
-        LOG_ERROR(log_path, " uTP: Failed to bind UtpOuiServiceServer to "
+        LOG_ERROR(trace, " uTP: Failed to bind UtpOuiServiceServer to "
                  , local_endpoint, "; ec=", ec);
     } else {
-        LOG_DEBUG(log_path, " uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
+        LOG_DEBUG(trace, " uTP UDP endpoint: ", _udp_multiplexer->local_endpoint());
     }
 
     assert(_udp_multiplexer->is_open());

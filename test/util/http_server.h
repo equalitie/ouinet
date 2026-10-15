@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/filesystem/path.hpp>
 #include <string>
 #include <memory>
@@ -9,6 +10,7 @@
 namespace ouinet {
 
 class Async;
+namespace util { class Url; }
 
 class HttpServer {
 private:
@@ -19,7 +21,7 @@ public:
     // files will be created.
     HttpServer(asio::any_io_executor, fs::path cert_dir);
 
-    void add_resource(std::string path, std::string content);
+    util::Url add_resource(std::string path, std::string content);
 
     asio::ip::tcp::endpoint local_endpoint() const;
 
@@ -29,6 +31,8 @@ public:
     std::string authority() const;
 
     const fs::path& certificate_path() const;
+
+    asio::ssl::context ssl_context_for_client() const;
 
     HttpServer(HttpServer&&);
     ~HttpServer();

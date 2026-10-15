@@ -12,7 +12,12 @@ endif()
 
 set(OUINET_TEST_TARGETS)
 
-add_library(ouinet_test_utils OBJECT ./util/http_server.cpp)
+add_library(ouinet_test_utils OBJECT
+    ./util/http_server.cpp
+    ./util/http_client.cpp
+    ./util/request_builder.cpp
+)
+
 ouinet_setup(TARGET ouinet_test_utils LINK ouinet_asio)
 
 function(add_test)
@@ -64,6 +69,7 @@ add_test(TARGET test_cache_control)
 add_test(TARGET test_crypto_stream)
 add_test(TARGET test_wait_condition)
 add_test(TARGET test_select)
+add_test(TARGET test_watch)
 add_test(TARGET test_scheduler)
 add_test(TARGET test_timeout_stream)
 add_test(TARGET test_response_reader)
@@ -72,6 +78,8 @@ add_test(TARGET test_response_writer)
 if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
     add_test(TARGET test_client_stop)
 endif ()
+
+add_test(TARGET test_client_config)
 
 if (NOT WIN32)
     add_test(TARGET test_persistent_lru_cache)

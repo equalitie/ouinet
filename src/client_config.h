@@ -19,6 +19,7 @@
 #include "bittorrent/bootstrap.h"
 #include "cxx/dns.h"
 #include "ouiservice/i2p/address.h"
+#include "ouiservice/i2p/service.h"
 #include "logger.h"
 #include "cache_type.h"
 
@@ -39,11 +40,24 @@ namespace ouinet {
     const size_t default_max_simultaneous_announcements = 16;
 #endif
 
+// Default priority for a metrics server when --metrics-server-priority is not used,
+// or a particular server's slot in it is left as the default value. All servers
+// sharing this priority land in a single tier, so leaving the option out entirely
+// reproduces the flat, non-tiered fan-out behavior.
+const int default_metrics_server_priority = 0;
+
 struct MetricsServerConfig {
     util::Url url;
     std::optional<std::string> token;
     std::optional<asio::ssl::context> cacert;
+    int priority = default_metrics_server_priority;
 };
+
+// Groups `servers` into tiers ordered by ascending priority (lowest value = highest
+// priority = first). Servers keep their relative order within a tier.
+OUINET_CLIENT_API
+std::vector<std::vector<MetricsServerConfig*>>
+group_servers_by_priority(std::vector<MetricsServerConfig>& servers);
 
 struct MetricsConfig {
     bool enable_on_start = false;
@@ -142,6 +156,10 @@ public:
       return _i2p_bep3_tracker;
     }
 
+    const std::string& tls_ca_cert_cn() const {
+        return _tls_ca_cert_cn;
+    }
+
     const asio::ip::tcp::endpoint& local_endpoint() const {
         return _local_ep;
     }
@@ -162,6 +180,7 @@ public:
     }
 
     bool is_cache_enabled(CacheType type) const { return _enabled_caches.get(type); }
+    void enable_cache(const CacheType type, const bool enable) { _enabled_caches.set(type, enable); }
     bool is_injecting_cache_enabled() const { return _enabled_caches.is_injecting_cache_enabled(); }
 
     boost::posix_time::time_duration max_cached_age() const {
@@ -190,6 +209,14 @@ public:
         return !_disable_bridge_announcement;
     }
 
+    bool is_upnp_enabled() const {
+        return !_disable_upnp;
+    }
+
+    bool is_local_peer_discovery_enabled() const {
+        return !_disable_local_peer_discovery;
+    }
+
     boost::optional<std::string>
     injector_credentials() const {
         return _injector_credentials;
@@ -216,6 +243,7 @@ public:
     }
 
     const std::string& client_credentials() const { return _client_credentials; }
+    std::string_view frontend_credentials() const { return _frontend_credentials; }
 
     std::string local_domain() const { return _local_domain; }
 
@@ -251,6 +279,10 @@ public:
 
     const std::optional<OuisyncCacheConfig>& ouisync_cache_config() const {
         return _ouisync;
+    }
+
+    const std::optional<I2pService::Config>& i2p_service_config() const {
+        return _i2p_service_config;
     }
 
 private:
@@ -314,6 +346,19 @@ public:
 
     bool is_private_target_allowed() const { return _allow_private_targets; }
 
+    bool is_https_proxy_enabled() const { return _https_proxy; }
+    void is_https_proxy_enabled(const bool v) { _https_proxy = v; }
+
+    bool is_https_frontend_enabled() const { return _https_frontend; }
+    void is_https_frontend_enabled(const bool v) { _https_frontend = v; }
+
+    bool is_frontend_post_requirement_enabled() const { return _frontend_post; }
+    void is_frontend_post_requirement_enabled(const bool v) { _frontend_post = v; }
+
+    const Trace& trace_root() const {
+        return _trace_root;
+    }
+
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
 
@@ -330,6 +375,7 @@ private:
     fs::path _ouinet_conf_file = "ouinet-client.conf";
     fs::path _ouinet_conf_save_file = "ouinet-client.saved.conf";
     asio::ip::tcp::endpoint _local_ep;
+    bool _https_proxy = false;
     boost::optional<uint16_t> _udp_mux_port;
     uint32_t _udp_mux_rx_limit = udp_mux_rx_limit_client;
     InjectorEndpoints _injector_endpoints;
@@ -338,6 +384,7 @@ private:
     std::string _tls_ca_cert_store_dir;
     std::vector<std::string> _tls_ca_cert_store_files;
     asio::ssl::context _origin_ssl_ctx{asio::ssl::context::tls_client};
+    std::string _tls_ca_cert_cn = "Your own local Ouinet client";
 
     ExtraBtBsServers _bt_bootstrap_extras;
     bool _bt_bootstrap_no_default = false;
@@ -346,10 +393,14 @@ private:
     bool _disable_proxy_access = false;
     bool _disable_injector_access = false;
     asio::ip::tcp::endpoint _front_end_endpoint;
+    bool _https_frontend = false;
+    bool _frontend_post = false;
     asio::local::stream_protocol::endpoint _front_end_unix_socket_endpoint;
     boost::optional<std::string> _front_end_access_token;
     boost::optional<std::string> _proxy_access_token;
     bool _disable_bridge_announcement = false;
+    bool _disable_upnp = false;
+    bool _disable_local_peer_discovery = false;
     EnabledCaches _enabled_caches;
 
     boost::posix_time::time_duration _max_cached_age
@@ -361,6 +412,7 @@ private:
 
     std::string _client_credentials;
     std::string _injector_credentials;
+    std::string _frontend_credentials;
 
     fs::path _cache_static_path;
     fs::path _cache_static_content_path;
@@ -377,6 +429,9 @@ private:
     boost::optional<I2pAddress> _i2p_bep3_tracker;
 
     std::optional<OuisyncCacheConfig> _ouisync;
+    std::optional<I2pService::Config> _i2p_service_config;
+
+    Trace _trace_root;
 };
 
 } // ouinet namespace

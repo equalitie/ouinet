@@ -12,6 +12,7 @@
 #include "http_util.h"
 #include "parse/number.h"
 #include "util.h"
+#include "util/select.h"
 #include "util/condition_variable.h"
 
 namespace ouinet {
@@ -398,7 +399,13 @@ CacheControl::do_fetch_fresh(const CacheRequest& rq, Async yield) {
         return std::unexpected(asio::error::invalid_argument);
     }
 
-    return fetch_fresh(*inject_rq, yield);
+    // If the resource is stale in the d-cache, the `CacheControl` will attempt
+    // to call this function to attempt to download fresh. This happens while
+    // still being connected to d-cache peers. If fetching fresh would take too
+    // long, the d-cache peers would disconnect and even the stale version
+    // would not be downloaded.
+    return timeout(default_timeout::http_recv_simple() / 2,
+            [&] (Async yield) { return fetch_fresh(*inject_rq, yield); }, yield);
 }
 
 std::expected<CacheControl::CacheEntry, sys::error_code>

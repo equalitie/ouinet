@@ -12,8 +12,7 @@
 #include <namespaces.h>
 #include <client.h>
 #include <client_config.h>
-#include <util/signal.h>
-#include <util/crypto.h>
+#include <util/cancel.h>
 #include <future>
 #include <mutex>
 #include <optional>
@@ -69,9 +68,6 @@ static void on_session_exit(const std::shared_ptr<ClientSession>& session)
 // Called under g_session_mutex from startClient().
 void start_client_thread(const std::vector<std::string>& args)
 {
-    static std::once_flag crypto_init_flag;
-    std::call_once(crypto_init_flag, ouinet::util::crypto_init);
-
     if (g_current_session) return;  // session already active — starting or running
 
     auto session = std::make_shared<ClientSession>();

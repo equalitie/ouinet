@@ -26,9 +26,20 @@ option(WITH_TEST "Compile tests" ON)
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
 option(WITH_OUISYNC "Build with Ouisync" OFF)
-option(WITH_I2PD "Build with i2pd" OFF)
+if (APPLE)
+    # iOS does not support spawning child processes, WITH_I2PD_LIB is a TODO
+    # macOS is a TODO
+    option(WITH_I2PD_EXE "Build with i2pd as a separate executable" OFF)
+    option(WITH_I2PD_LIB "Build with i2pd as a library" OFF)
+else()
+    option(WITH_I2PD_EXE "Build with i2pd as a separate executable" ON)
+    option(WITH_I2PD_LIB "Build with i2pd as a library" ON)
+endif()
 option(OUINET_HARDCODE_CA_CERTS "Hardcode CA certificates" OFF)
 option(OUINET_MEASURE_BUILD_TIMES "Show compilation and link times" OFF)
+
+# https://clang.llvm.org/docs/analyzer/developer-docs/PerformanceInvestigation.html
+option(OUINET_CLANG_TIME_TRACE "Enable compilation performance analysis" OFF)
 
 ################################################################################
 # show summary
@@ -38,7 +49,8 @@ message(STATUS "Options:")
 message(STATUS "  WITH_TEST                : ${WITH_TEST}")
 message(STATUS "  WITH_ASAN                : ${WITH_ASAN}")
 message(STATUS "  WITH_OUISYNC             : ${WITH_OUISYNC}")
-message(STATUS "  WITH_I2PD                : ${WITH_I2PD}")
+message(STATUS "  WITH_I2PD_EXE            : ${WITH_I2PD_EXE}")
+message(STATUS "  WITH_I2PD_LIB            : ${WITH_I2PD_LIB}")
 message(STATUS "  OUINET_HARDCODE_CA_CERTS : ${OUINET_HARDCODE_CA_CERTS}")
 message(STATUS "")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
@@ -116,6 +128,28 @@ set_target_properties(asio_utp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
+if (IOS)
+    # asio_utp stays a shared library (linking it statically can produce
+    # undefined behaviour across the Asio/libutp shared-library boundary), but a
+    # bare .dylib is not reliably accepted by App Store review. Package it as a
+    # proper framework so it can be embedded and code-signed in the app bundle.
+    # ouinet.framework loads it at runtime via @rpath/asio_utp.framework/asio_utp
+    # (resolved through the existing @executable_path/Frameworks rpath).
+    # NOTE: asio_utp is defined in the modules/asio-utp submodule; this
+    # parent-side customization keeps the submodule untouched (allowed by
+    # CMP0079, set above).
+    set_target_properties(asio_utp PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.asio-utp
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
+
 ###########################################################
 set(CPPUPnP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules/cpp-upnp)
 find_package(CPPUPnP REQUIRED)
@@ -126,7 +160,7 @@ add_subdirectory(./rust)
 
 function(ouinet_setup)
     set(oneValueArgs TARGET)
-    set(multiValueArgs LINK DEFS)
+    set(multiValueArgs LINK DEFS INCS)
 
     cmake_parse_arguments(
         ARG
@@ -152,13 +186,17 @@ function(ouinet_setup)
 
     target_compile_definitions(${ARG_TARGET} PRIVATE ${ARG_DEFS})
     target_compile_options(${ARG_TARGET} PRIVATE -std=c++23)
+    if (OUINET_CLANG_TIME_TRACE)
+        target_compile_options(${ARG_TARGET} PRIVATE $<$<CXX_COMPILER_ID:Clang>:-ftime-trace>)
+    endif()
     target_include_directories(${ARG_TARGET} PUBLIC
         ${OUINET_ROOT_DIR}/src
         ${OUINET_ROOT_DIR}/rust
         ${OUINET_ROOT_DIR}/modules/asio-utp/include
         ${OUINET_ROOT_DIR}/modules/cpp-upnp/include
         ${BUILT_BOOST_INCLUDE_DIR}
-        ${OPENSSL_INCLUDE_DIR})
+        ${OPENSSL_INCLUDE_DIR}
+        ${ARG_INCS})
     target_link_libraries(${ARG_TARGET} ${ARG_LINK})
 endfunction()
 
@@ -170,10 +208,11 @@ add_subdirectory(./src/ouiservice/ouisync)
 file(GLOB ouinet_common_sources
     "./src/task.cpp"
     "./src/logger.cpp"
-    "./src/util/log_path.cpp"
+    "./src/util/trace.cpp"
     "./src/util/random.cpp"
     "./src/async_sleep.cpp"
     "./src/cache/resource_id.cpp"
+    "./src/config/i2p_service.cpp"
     "./src/connect_to_host.cpp"
     "./src/response_part.cpp"
     "./src/util.cpp"
@@ -222,6 +261,27 @@ ouinet_setup(TARGET ouinet_common
         OUINET_API_COMMON_EXPORT
         OUINET_API_I2P_LOCAL
 )
+
+if (IOS)
+    # ouinet_common is a SHARED library that ouinet.framework loads at runtime.
+    # A bare @rpath/libouinet_common.dylib is never packaged into the app bundle
+    # (and a bare .dylib is not reliably accepted by App Store review), so
+    # package it as a proper framework that can be embedded and code-signed
+    # alongside ouinet.framework. ouinet.framework then loads it via
+    # @rpath/ouinet_common.framework/ouinet_common, resolved through the existing
+    # @executable_path/Frameworks rpath. Shipped as a companion
+    # ouinet_common.xcframework (see build-darwin.sh).
+    set_target_properties(ouinet_common PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER ie.equalit.ouinet-common
+        VERSION 1.0.0
+        SOVERSION 1.0.0
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${VERSION_NAME}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${VERSION_NAME}
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "Apple Development"
+    )
+endif()
 
 if (OUINET_HARDCODE_CA_CERTS)
     set(OUINET_HARDCODED_CA_CERTS hardcode_ca_certs)
@@ -296,19 +356,12 @@ ouinet_setup(TARGET ouinet_client
         OUINET_API_I2P_LOCAL
 )
 
-if (CLIENT_LIB_TYPE)
-    #add_library(client_lib ${CLIENT_LIB_TYPE})
-
-    #if (NOT WIN32 AND NOT MINGW)
-    #    set_target_properties(client_lib PROPERTIES OUTPUT_NAME "client")
-    #endif()
-
-    #ouinet_setup(TARGET client_lib LINK PUBLIC ${client_link_libs})
-
-    if (IOS)
-        set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
-        find_package(ouinet REQUIRED)
-    endif()
+if (IOS)
+    # On iOS the client is packaged as ouinet.framework (built via
+    # ios/ouinet/ouinet-config.cmake, which links ouinet_client) rather than a
+    # standalone executable.
+    set(ouinet_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ios/ouinet)
+    find_package(ouinet REQUIRED)
 else()
     add_executable(client "./src/client_main.cpp")
     target_link_libraries(client ouinet_client)
