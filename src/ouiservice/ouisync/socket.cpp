@@ -187,9 +187,14 @@ OuisyncSocket::~OuisyncSocket() {
         return;
     }
 
+    // NOTE: Copy the executor before moving `_state` into the lambda below. The order in which
+    // function arguments are evaluated is unspecified, so calling `get_executor()` directly in the
+    // argument list may run after `_state` has already been moved out (this happens with MinGW).
+    auto ex = get_executor();
+
     // Close in the background, ignoring errors
     task::spawn_detached(
-        get_executor(),
+        std::move(ex),
         [state = std::move(_state)] (asio::yield_context yield) mutable {
             state->close(Async(yield));
         }
