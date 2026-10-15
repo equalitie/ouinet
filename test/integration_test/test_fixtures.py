@@ -122,7 +122,7 @@ class TestFixtures:
     # BEP3-over-I2P cache test to confirm the seeding client actually served
     # the request (serve_utp_req/serve_local ENDthe uTP  never fires on the I2P cache).
     CACHE_CLIENT_I2P_REQUEST_SERVED = (
-        r'[\s\S]*serve_i2p_req/serve_local Write; ec="Success"[\s\S]*'
+        r'[\s\S]*serve_i2p_req/serve_local END; ec="Success"[\s\S]*'
     )
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
     # Logged by I2pAnnouncer::Loop in src/ouiservice/i2p/announcer.cpp once
