@@ -21,13 +21,13 @@ class OuinetProcessProtocol(object):
 
     def __init__(self, proc_config, watchpoint_regexes: List[str]):
         self.regexes: List[str] = watchpoint_regexes
-        self.benchmarks: dict[str, bool] = {}
+        self.benchmarks: dict[str, re.Match[str] | None] = {}
         self._proc_config = proc_config
         self.app_name = proc_config.app_name
         self.bep3_serving_b32 = ""
 
         for regex in self.regexes:
-            self.benchmarks[regex] = False
+            self.benchmarks[regex] = None
 
         self._logger: logging.Logger = logging.getLogger()
 
@@ -57,7 +57,7 @@ class OuinetProcessProtocol(object):
             match = re.match(regex, data)
             if match:
                 if not self.benchmarks[regex]:
-                    self.benchmarks[regex] = True
+                    self.benchmarks[regex] = match
 
     def look_for_serving_b32(self, data):
         m = re.match(TestFixtures.BEP3_SERVING_IDENTITY_REGEX, data)
