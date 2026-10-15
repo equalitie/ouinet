@@ -256,7 +256,7 @@ async def try_fetch_over_i2p(content) -> Response:
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_I2P_REQUESTS):
         print("request attempt no " + str(i + 1) + "...")
         try:
-            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content)
+            response = await request_echo(TestFixtures.I2P_CLIENT["port"], content, TestFixtures.PUBLIC_INJECTOR_I2P_ROUTE)
             assert_ok(response, content)
             return response
         except Exception as e:
@@ -808,7 +808,6 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         idx_key=None,
         args=[
             "--disable-origin-access",
-            "--disable-cache",
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
             "--injector-ep",
