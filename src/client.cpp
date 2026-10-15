@@ -40,6 +40,7 @@
 #include "ssl/util.h"
 #include "bittorrent/mainline_dht.h"
 #include "bep5_swarms.h"
+#include "swarm_calculator.h"
 
 #include "ouiservice.h"
 #include "ouiservice/i2p/session.h"
@@ -125,6 +126,10 @@ public:
         , _dns_resolver(std::make_shared<dns::Resolver>(_config.dns_config()))
     {
         LOG_INFO("Repo root: ", _config.repo_root());
+
+        if (auto cache_http_pub_key = _config.cache_http_pub_key()) {
+            _swarm_calculator = std::make_shared<SwarmCalculator>(*cache_http_pub_key);
+        }
 
         // We do *not* want to do this since
         // we will not be checking certificate names,
@@ -724,6 +729,7 @@ private:
 
     shared_ptr<dns::Resolver> _dns_resolver;
     std::optional<I2pService> _i2p_service;
+    std::shared_ptr<SwarmCalculator> _swarm_calculator;
 };
 
 //------------------------------------------------------------------------------
@@ -2861,12 +2867,12 @@ std::shared_ptr<bt::DhtBase> Client::get_dht() const {
     return _state->_bt_dht;
 }
 
+std::shared_ptr<SwarmCalculator> Client::swarm_calculator() const {
+    return _state->_swarm_calculator;
+}
+
 bittorrent::NodeID Client::compute_infohash_for_resource_group(std::string_view group) const {
-    auto cache_pub_key = *_state->_config.cache_http_pub_key();
-    std::string uri_swarm_prefix = bep5::compute_uri_swarm_prefix(cache_pub_key, http_::protocol_version_current);
-    std::string swarm_name = bep5::compute_uri_swarm_name(uri_swarm_prefix, {group.begin(), group.size()});
-    util::SHA1::digest_type hash = util::sha1_digest(swarm_name);
-    return bittorrent::NodeID(hash);
+    return swarm_calculator()->swarm_id(group);
 }
 
 SysResult<I2pAddress> Client::local_i2p_address(Async yield) const {

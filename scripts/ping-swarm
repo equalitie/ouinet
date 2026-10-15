@@ -61,7 +61,7 @@ select_peers() {  # () / bt-pep5_output => () endpoint*
 }
 
 bep5_query() {  # (infohash) => () bt-pep5_output
-    ./bt-bep5 0.0.0.0 get_peers $1 2>&1
+    ./bt_bep5 0.0.0.0 get_peers $1 2>&1
 }
 
 for group in "$@"; do

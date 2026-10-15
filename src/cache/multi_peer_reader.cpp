@@ -467,11 +467,12 @@ public:
                 }
 
                 // Keep looking up for peers until success or until `this` is destroyed.
-                const auto min_sleep = chrono::milliseconds(100);
+                const auto min_sleep = chrono::milliseconds(500);
                 const auto max_sleep = chrono::milliseconds(10000);
+                const auto max_try = 4;
                 auto sleep = min_sleep;
 
-                while (true) {
+                for (size_t i = 0; i < max_try; ++i) {
                     auto peer_eps = _dht_lookup->get(yield);
 
                     if (peer_eps && !peer_eps->empty()) {
@@ -661,11 +662,6 @@ public:
                 );
 
                 LOG_DEBUG(yield, " Done fetching hash list; result=", debug(result));
-
-                if (result == std::unexpected(asio::error::timed_out)) {
-                    LOG_DEBUG(yield, " BEP5 hash list download timed out");
-                    return;
-                }
 
                 peer->_candidate_hook.unlink();
 
