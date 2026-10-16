@@ -28,6 +28,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
     using namespace std::chrono_literals;
 
     assert(_udp_multiplexer->is_open());
+    LOG_DEBUG(yield, "YYY: UtpOuiServiceServer::start_listen");
     yield.spawn(_cancel, [this] (Async yield) {
         while (true) {
             sys::error_code ec;
@@ -35,9 +36,11 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
             auto cancel_con = yield.cancel_slot([&] { s.close(); });
 
+            LOG_DEBUG(yield, "YYY: pre asio_utp::socket::bind");
             s.bind(*_udp_multiplexer, ec);
             assert(!ec);
 
+            LOG_DEBUG(yield, "YYY: pre asio_utp::socket::async_accept");
             auto r = s.async_accept(yield);
 
             if (!r) {
@@ -48,6 +51,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
             }
 
             auto ep = util::str("uTP/", s.remote_endpoint());
+            LOG_DEBUG(yield, "YYY: pre channel_send_functions::async_send ", ep);
             r = _accept_queue.async_send(sys::error_code(), {std::move(s), std::move(ep)}, yield);
             if (!r) break;
         }
@@ -68,9 +72,8 @@ UtpOuiServiceServer::~UtpOuiServiceServer()
 
 std::expected<GenericStream, sys::error_code> UtpOuiServiceServer::accept(Async yield)
 {
-    LOG_DEBUG(yield, "YYY: uTP accept");
+    LOG_DEBUG(yield, "YYY: ouinet::ouiservice::UtpOuiServiceServer::accept");
     auto s = _accept_queue.async_receive(yield);
-    LOG_DEBUG(yield, "YYY: uTP _accept_queue.async_receive finished");
     if (!s.has_value()) {
         LOG_DEBUG(yield, "YYY: uTP GenericStream s failed ", s.error());
         return std::unexpected(s.error());
