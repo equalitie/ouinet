@@ -46,7 +46,7 @@ class TestFixtures:
     INDEX_READY_REGEX_INDEX = 1
     REQUEST_CACHED_REGEX_INDEX = 2
 
-    REPO_FOLDER_NAME = "test_repos"
+    REPO_FOLDER_NAME = "/tmp/ouinet_python_test"
     # TODO: they should be in the same dir I think
     I2P_FOLDER_NAME = "i2p"
 
@@ -55,7 +55,7 @@ class TestFixtures:
 
     I2P_INJECTOR_NAME = "i2p_injector"
     I2P_SERVICE_READY_REGEX = r"[\s\S]*Self connection passed. SAM endpoint:\s*(\S+)$"
-    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Tunnel has been established, local_addr:\s*(\S+)$"
+    I2P_TUNNEL_READY_REGEX = r"[\s\S]*I2P Session created, local_addr:\s*(\S+)$"
     I2P_ANNOUNCER_ANNOUNCED_REGEX = r"[\s\S]*BEP3 announced\s*(\S+)$"
 
     I2P_INJECTOR_PRIVATE_KEY = "KWi-Y9dah6Acn52RFt6AnbAgr~c6zn0p9wSkuJMfiOe1tRAJ3wxxM36Hx1ASDS0no9EXoWBMk4EkiTSC7p4FNAuODhpTzITKQowOyBUWwSJnC4xzTYdturDqaZ3kJAPXgfxZoCQyPHMy3p8x7I7A3g03Pmlt26pQPF7slbUfp~Gptl0lQVKCwpHoIc1WlgcCzZDEAjCRcAuw36r5tluL3qrHVcJhsv73ZBq-ZfOoWAgi5D~UsUoq82EdpvpC6B37I9Gsj44IDByAG7xvG44R9RiJ3-ZBbGkAebJXhOtWFcoDoX~pnOcscY~q8C6HdYVG7gsfMWwW0cmD8YsCx0eYAByqMB~lmOWcEiBXFMj3Mcswtsk-5vSZmoiRvYs57g2hq8EHGm77~bOmoseUan2NjJRDwiCJa4X8jWv2qbYN84hEa2vALoxfNNoc0Feq3N9MjACf6H0kg4BpqBS0qG0wXHEjH9L~TwmpkdnjpB8iW2jp~v7XGjm7q5S2ycySQrHxBQAEAAEAAPGosOGDfqdjVcsK1h4tnCQUvuDyOOq1nI9bA2XCCje8T77VNux4z7IncMAZy02G04WD2bYCDusTgbeKCgtGdVoiF9zT3wpqOmpSDfs1fPPnIDZrTt1CJHg4vnu~RhqBoaXLRFjsojZ4lC~UYXWKaawTm0~mvexvSzzXOYwlzAi0Cgp1zHNPHS8BI9afnQjvNGLzdNaZ4gHlC1Am0iNmUA0WvQ3OsZFC7HRoOa9FtzLg8FCgKrIcNORCJKRIknrC7ODVnd5WJsEfrVTQlQXeBwB56POz1lrEEtSRHlMIap6YhKGSDKBpAUubrGqYtkiiOAXJp1QCAqyPaLeZumf2VeJ9AeU6lVvqP6dK3sDf7Tj2lbF7O92LlanedKNoEDa1Ow=="
@@ -90,8 +90,7 @@ class TestFixtures:
     TCP_INJECTOR_NAME = "tcp_injector"
     TCP_INJECTOR_PORT_READY_REGEX = r"[\s\S]*TCP address[\s\S]*"
     # TCP_INJECTOR_PORT_READY_REGEX = "TCP address"
-    # Avoid 7070, which is i2pd's default web-console port and would collide
-    # with a system-wide i2pd if it is running during the test.
+    # Don't use 7070 it is used by I2PD 
     TCP_INJECTOR_PORT = 7090
 
     CACHE_INJECTOR_NAME = "cache_injector"
@@ -153,6 +152,7 @@ class TestFixtures:
     BEP5_REQUEST_CACHED_REGEX = r"[\s\S]*X-Ouinet-Injection:[\s\S]*"
     START_OF_IPNS_RESOLUTION_REGEX = r"[\s\S]*Resolving IPNS address: [\s\S]*"
     IPFS_CACHE_READY_REGEX = r"[\s\S]*IPNS ID has been resolved successfully[\s\S]*"
+    BEP5_CACHE_READY_REGEX = r"[\s\S]*BT DHT: Successfully stored contacts[\s\S]*"  # r"[\s\S]*BEP5 index: bootstrapped BitTorrent DHT[\s\S]*" TODO: Replace with correct regex.
     IPFS_REQUEST_CACHED_REGEX = (
         r"[\s\S]*Request was successfully published to cache[\s\S]*"
     )
@@ -164,7 +164,10 @@ class TestFixtures:
     TRIAL_CACHE_REQUESTS_WAIT = 20
 
     MAINNET_INJECTOR_HASH = "zh6ylt6dghu6swhhje2j66icmjnonv53tstxxvj6acu64sc62fnq"
-    FRESH_SUCCESS_REGEX = r'[\s\S]*fresh/injector Finish; ec="Success"[\s\S]*'
+    FRESH_SUCCESS_REGEX = (
+        r'[\s\S]*(?:fresh|cache_miss)/injector Finish; ec="Success"[\s\S]*'
+    )
+    DHT_CONTACTS_STORED_REGEX = r"[\s\S]*DHT: Successfully stored contacts[\s\S]*"
     DHT_INITIALIZED_REGEX = r"[\s\S]*/dht WAN endpoint[\s\S]*"
 
     I2P_DHT_ADVERTIZE_WAIT_PERIOD = 30
