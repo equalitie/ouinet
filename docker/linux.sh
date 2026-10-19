@@ -444,6 +444,7 @@ for target_os in ${target_oss[@]}; do
 
         env+=(
           ABI="$android_abi"
+          WITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
         )
 
         opt_env=()
