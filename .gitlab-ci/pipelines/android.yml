@@ -12,6 +12,7 @@ android / build:
       --target-os $TARGET_OS
       --artifact-dir $BUILD_PATH
       --cmake-build-type $CMAKE_BUILD_TYPE
+      --with-ouisync
       $CONTAINER_ARGS
   artifacts:
     paths:
