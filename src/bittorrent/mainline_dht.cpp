@@ -968,7 +968,7 @@ void DhtNode::receive_loop(Async yield)
                     message_map = std::move(*message_map)
                 ] (Async yield) mutable {
                     auto cleanup = defer([&] {
-                        LOG_WARN(yield, " YYY: cleanup: ", concurrency);
+                        //LOG_WARN(yield, " YYY: cleanup: ", concurrency);
                         // Not sure why this `if` is needed, but we were sometimes getting memory
                         // access errors without it.
                         if (!yield.is_cancelled()) {
