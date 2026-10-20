@@ -64,7 +64,7 @@ namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
 namespace fs = boost::filesystem;
 
-#define DEBUG_SHOW_MESSAGES 0
+#define DEBUG_SHOW_MESSAGES 1
 
 // Max number of queries that can be handled concurrently. When this number is reached, any incoming
 // queries are ignored.
@@ -927,7 +927,7 @@ void DhtNode::receive_loop(Async yield)
 
         if (!decoded_message) {
 #           if DEBUG_SHOW_MESSAGES
-            LOG_DEBUG(yield, " recv: ", sender, " Failed parsing \"", packet, "\"");
+            LOG_DEBUG(yield, " recv: ", sender, " Failed parsing \"", packet.value(), "\"");
 #           endif
 
             continue;
@@ -1040,7 +1040,7 @@ std::expected<void, sys::error_code> DhtNode::send_datagram(
     Async yield
 ) {
 #   if DEBUG_SHOW_MESSAGES
-    LOG_DEBUG(yield, " send: ", destination, " ", message, " :: ", i->second);
+    LOG_DEBUG(yield, " send: ", destination, " ", message);
 #   endif
     return compat([&](Cancel cancel, asio::yield_context yield) {
         _multiplexer->send(
