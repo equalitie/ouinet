@@ -57,31 +57,11 @@ PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository
 SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
 SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
 
-# Android API level, see https://redmine.equalit.ie/issues/12143
-EMULATOR_PLATFORM=android-${EMULATOR_API}
-
-EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
-
-# The following options may be limited by availability of SDK packages,
-# to get list of all packages, use `sdkmanager --list`.
-
-# The image to be used by the emulator AVD
-EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
-EMULATOR_API=${EMULATOR_API:-$OUINET_MIN_API}
-EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
-
-# To get list of all devices, use `avdmanager list device`.
-EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
-EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
-
 cat <<EOF
 Configuration environment variables:
 
 ABI="$ABI"
 SDK_DIR="$SDK_DIR"
-EMULATOR_AVD="$EMULATOR_AVD"
-EMULATOR_DEV="$EMULATOR_DEV"
-EMULATOR_API="$EMULATOR_API"
 
 EOF
 
@@ -94,7 +74,7 @@ export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEA
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build emu publish"
+ALLOWED_MODES="bootstrap build publish"
 DEFAULT_MODES="bootstrap build"
 
 function check_mode {
@@ -133,12 +113,6 @@ function setup_sdk_deps {
     # Build dependencies are handled by Gradle once `$ANDROID_HOME` is set.
     sdk_pkgs[build]="
 "
-    sdk_pkgs[emu]="
-$EMULATOR_IMAGE
-platforms;$EMULATOR_PLATFORM
-platform-tools
-emulator
-"
 
     # Collect SDK packages that need to be installed for
     # all the modes requested in the command line.
@@ -170,16 +144,6 @@ emulator
     export PATH="$SDK_DIR/platform-tools:$PATH"
 
     export ANDROID_HOME="$SDK_DIR"
-}
-
-######################################################################
-# Create Android virtual device for the emulator.
-function maybe_create_avd {
-    if ! "$SDK_DIR/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
-        echo no | "$SDK_DIR/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
-                                                  -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
-                                                  -b "$ABI" -d "$EMULATOR_DEV"
-    fi
 }
 
 ######################################################################
@@ -274,47 +238,18 @@ function publish_ouinet_aar {
 }
 
 ######################################################################
-# Run the Android emulator with the AVD created above.
-# The `-use-system-libs` option is necessary to avoid errors like
-# "libGL error: unable to load driver" and X error `BadValue` on
-# `X_GLXCreateNewContext`.
-function run_emulator {
-    echo "Starting Android emulator, first boot may take more than 10 minutes..."
-    "$SDK_DIR/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-                              -use-system-libs "$@" &
-    local emupid=$!
-    # Inspired in <https://android.stackexchange.com/q/83726>.
-    adb -e wait-for-device
-    # Candidates:
-    #   - sys.boot_completed == 1
-    #   - service.bootanim.exit == 1
-    #   - ro.runtime.firstboot != 0 (nor empty)
-    adb -e shell 'while [ "$(getprop ro.runtime.firstboot 0)" -lt 1 ]; do sleep 1; done'
-    cat << EOF
 
-The emulated Android environment is now running.
-Once you can interact with it normally, you may execute:
-
-  - To install the APK: $(command -v adb) -e install $APK
-  - To uninstall the APK: $(command -v adb) -e uninstall $APK_ID
-
-EOF
-    wait $emupid
-}
-
-######################################################################
-
-# Parse modes and leave emulator arguments.
+# Parse modes
 
 progname=$(basename "$0")
 if [ "$1" = --help ]; then
-    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
+    echo "Usage: $progname [MODE...]"
     echo "Accepted values of MODE: $ALLOWED_MODES"
     echo "If no MODE is provided, assume \"$DEFAULT_MODES\"."
     exit 0
 fi
 
-while [ -n "$1" -a "$1" != -- ]; do
+while [ -n "$1" -a "$1" ]; do
     if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
         echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
         exit 1
@@ -322,10 +257,6 @@ while [ -n "$1" -a "$1" != -- ]; do
     MODES="$MODES $1"
     shift
 done
-
-if [ "$1" = -- ]; then
-    shift  # leave the rest of arguments for the emulator
-fi
 
 if [ ! "$MODES" ]; then
     MODES="$DEFAULT_MODES"
@@ -350,9 +281,3 @@ if check_mode publish; then
       publish_ouinet_aar
     fi
 fi
-
-if check_mode emu; then
-    maybe_create_avd
-    run_emulator "$@"
-fi
-
