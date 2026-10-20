@@ -954,8 +954,9 @@ void DhtNode::receive_loop(Async yield)
         }
 
         if (*message_type == "q") {
+            LOG_WARN(yield, " YYY: concurrency: ", concurrency);
             if (concurrency >= MAX_HANDLE_QUERY_CONCURRENCY) {
-                LOG_WARN(yield, " too many concurrent queries");
+               LOG_WARN(yield, " too many concurrent queries");
                 continue;
             }
 
@@ -970,10 +971,14 @@ void DhtNode::receive_loop(Async yield)
                     &concurrency
                 ] (Async yield) mutable {
                     auto cleanup = defer([&] {
+                        LOG_WARN(yield, " YYY: cleanup: ", concurrency);
                         // Not sure why this `if` is needed, but we were sometimes getting memory
                         // access errors without it.
                         if (!yield.is_cancelled()) {
                             --concurrency;
+                            LOG_WARN(yield, " YYY: yield IS NOT cancelled: ", concurrency);
+                        } else {
+                            LOG_WARN(yield, " YYY: yield IS cancelled: ", concurrency);
                         }
                     });
 
