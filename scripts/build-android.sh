@@ -11,6 +11,7 @@ ABI=${ABI:-omni}
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
 
 CMAKEARG_WITH_OUISYNC=${WITH_OUISYNC}
+CMAKEARG_OUISYNC_SRC_DIR=${OUISYNC_SRC_DIR}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -89,7 +90,7 @@ export OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
-export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC
+export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEARG_OUISYNC_SRC_DIR
 
 ######################################################################
 MODES=

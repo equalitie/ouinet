@@ -447,6 +447,10 @@ for target_os in ${target_oss[@]}; do
           WITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
         )
 
+        if [ -n "$container_ouisync_dir" ]; then
+            env+=(OUISYNC_SRC_DIR=$container_ouisync_dir)
+        fi
+
         opt_env=()
         for v in "${env[@]}"; do
             opt_env+=(-e "$v")
