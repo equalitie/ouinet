@@ -797,6 +797,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         args=[
             "--listen-on-i2p", "true",
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_INJECTOR_SAM_PORT),
             "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
             "--log-level", "DEBUG",
         ]
@@ -830,6 +831,7 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
             "--injector-ep",
             "i2p:" + injector_i2p_public_id,
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CLIENT_SAM_PORT),
             "--i2p-hops-per-tunnel",
             str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
         ],
@@ -866,6 +868,7 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
         args=[
             "--listen-on-i2p", "true",
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_INJECTOR_SAM_PORT),
             "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
             "--log-level",
             "DEBUG",
@@ -908,6 +911,7 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
             "--cache-http-public-key", index_key,
             "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CLIENT_SAM_PORT),
             "--injector-ep", "i2p:" + injector_i2p_public_id,
             "--i2p-hops-per-tunnel",
             str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
@@ -994,6 +998,7 @@ async def test_bep3_cache_over_i2p(http_server, log, content_length):
             "bep3-http-over-i2p", "--cache-http-public-key", str(index_key),
             "--i2p-bep3-tracker", TestFixtures.BEP3_TRACKER_ID,
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CACHE_CLIENT_SAM_PORTS[0]),
             "--disable-origin-access",
             "--disable-proxy-access",
             "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
@@ -1070,6 +1075,7 @@ async def test_bep3_cache_over_i2p(http_server, log, content_length):
             "--disable-origin-access",
             "--disable-proxy-access",
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CACHE_CLIENT_SAM_PORTS[1]),
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
             "--front-end-ep",

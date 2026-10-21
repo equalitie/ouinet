@@ -65,6 +65,13 @@ class TestFixtures:
         r"[\s\S]*Error in getting i2p seeder response[\s\S]*"
     )
 
+    # Each managed i2pd instance needs a distinct SAM port (i2pd's SAMBridge
+    # derives portUDP = portTCP-1, which wraps to 65535 when portTCP is 0).
+    I2P_INJECTOR_SAM_PORT = 17656
+    I2P_CLIENT_SAM_PORT   = 17657
+    # BEP3 cache test runs both cache clients with I2P; give each its own port.
+    I2P_CACHE_CLIENT_SAM_PORTS = [17658, 17659]
+
     I2P_CLIENT = {
         "name": "cacheless_i2p_client",
         "port": 3888,
