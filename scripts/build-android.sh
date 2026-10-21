@@ -9,7 +9,6 @@ ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
-
 CMAKEARG_WITH_OUISYNC=${WITH_OUISYNC}
 CMAKEARG_OUISYNC_SRC_DIR=${OUISYNC_SRC_DIR}
 
@@ -74,124 +73,14 @@ export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEA
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build publish"
-DEFAULT_MODES="bootstrap build"
+ALLOWED_MODES="build publish"
+DEFAULT_MODES="build"
 
 function check_mode {
     if echo "$MODES" | grep -q "\b$1\b"; then
         return 0
     fi
     return 1
-}
-
-######################################################################
-function maybe_install_sdk {
-    local toolsfile=commandlinetools-linux-13114758_latest.zip
-
-    # Reuse downloaded SDK stuff from old versions of this script.
-    if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
-        mv "$DIR/sdk_root" "$SDK_DIR"
-    fi
-
-    if [ ! -f "$SDK_MANAGER" ]; then
-        echo "cannot find SDK manager: $SDK_MANAGER"
-        echo "downlodaing SDK..."
-        [ -d "$SDK_DIR/cmdline-tools" ] || rm -rf "$SDK_DIR/cmdline-tools"
-        if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/command-line/
-            wget -nv "https://dl.google.com/android/repository/$toolsfile"
-        fi
-        unzip -q "$toolsfile" -d "$SDK_DIR"
-    fi
-}
-
-function setup_sdk_deps {
-    # SDK packages needed by the different modes.
-    # To get list of all packages, use `sdkmanager --list`.
-    local sdk_pkgs
-    declare -A sdk_pkgs
-    # Build dependencies are handled by Gradle once `$ANDROID_HOME` is set.
-    sdk_pkgs[build]="
-"
-
-    # Collect SDK packages that need to be installed for
-    # all the modes requested in the command line.
-    local sdk_pkgs_install mode pkg
-    for mode in $ALLOWED_MODES; do
-        if check_mode $mode; then
-            for pkg in ${sdk_pkgs[$mode]}; do
-                if [ ! -d "$SDK_DIR/$(echo $pkg | tr ';' /)" ]; then
-                    sdk_pkgs_install="$sdk_pkgs_install $pkg"
-                fi
-            done
-        fi
-    done
-
-    # Filter out repeated packages.
-    sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
-    # Install missing packages.
-    if [ "$sdk_pkgs_install" ]; then
-        # This produces progress bars that are very frequently updated
-        # and clutter build logs.
-        yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR $sdk_pkgs_install > /dev/null
-    fi
-    # Accept licenses from stuff installed by Gradle on previous runs.
-    # Not very clean, but if Gradle complains about licenses not being accepted,
-    # at least a second run would succeed.
-    yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR --licenses > /dev/null
-
-    # Prefer locally installed platform tools to those in the system.
-    export PATH="$SDK_DIR/platform-tools:$PATH"
-
-    export ANDROID_HOME="$SDK_DIR"
-}
-
-######################################################################
-function maybe_install_gradle {
-    check_mode build || return 0
-
-    GRADLE_REQUIRED_MAJOR_VERSION=8
-    GRADLE_REQUIRED_MINOR_VERSION=14
-    GRADLE_REQUIRED_PATCH_VERSION=3
-
-    NEED_GRADLE=false
-
-    if ! command -v gradle > /dev/null; then
-       NEED_GRADLE=true
-    else
-        GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
-        GRADLE_MAJOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f1`
-        GRADLE_MINOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f2`
-        GRADLE_PATCH_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f3`
-
-        if [ $GRADLE_REQUIRED_MAJOR_VERSION -gt $GRADLE_MAJOR_VERSION ]; then
-            NEED_GRADLE=true
-        else
-            if [ $GRADLE_REQUIRED_MAJOR_VERSION -eq $GRADLE_MAJOR_VERSION ]; then
-                 if [ $GRADLE_REQUIRED_MINOR_VERSION -gt $GRADLE_MINOR_VERSION ]; then
-                    if [ $GRADLE_REQUIRED_PATCH_VERSION -gt $GRADLE_PATCH_VERSION ]; then
-                        NEED_GRADLE=true
-                    fi
-                 fi
-             fi
-        fi
-    fi
-
-    echo need gradle? $NEED_GRADLE
-
-    if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-8.14.3
-        local GRADLE_ZIP=$GRADLE-bin.zip
-        if [ ! -d "$GRADLE" ]; then
-            if [ ! -f $GRADLE_ZIP ]; then
-                echo "downloading gradle..."
-                wget -nv https://services.gradle.org/distributions/$GRADLE_ZIP
-            fi
-            #TODO: Check SHA256
-            unzip -q $GRADLE_ZIP
-        fi
-        export PATH="`pwd`/$GRADLE/bin:$PATH"
-    fi
 }
 
 ######################################################################
@@ -260,13 +149,6 @@ done
 
 if [ ! "$MODES" ]; then
     MODES="$DEFAULT_MODES"
-fi
-
-if check_mode bootstrap; then
-    maybe_install_sdk
-    setup_sdk_deps
-    maybe_install_gradle
-    # TODO: miniupnp
 fi
 
 if check_mode build; then
