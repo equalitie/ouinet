@@ -217,7 +217,9 @@ DhtNode::DhtNode( asio_utp::udp_multiplexer multiplexer
     _storage_dir(std::move(storage_dir)),
     _bootstrap_config(std::move(bs)),
     _metrics(std::move(metrics)),
-    _trace(std::move(trace))
+    _trace(std::move(trace)),
+    _concurrency(0),
+    _handle_query_ok(true)
 {
 }
 
@@ -905,10 +907,7 @@ NodeID DhtNode::data_put_mutable(
 
 void DhtNode::receive_loop(Async yield)
 {
-    bool handle_query_ok = true;
-    int concurrency = 0;
-
-    while (handle_query_ok) {
+    while (_handle_query_ok) {
         /*
          * Later versions of boost::asio make it possible to (1) wait for a
          * datagram, (2) find out the size, (3) allocate a buffer, (4) recv
@@ -954,32 +953,30 @@ void DhtNode::receive_loop(Async yield)
         }
 
         if (*message_type == "q") {
-            if (concurrency >= MAX_HANDLE_QUERY_CONCURRENCY) {
+            if (_concurrency >= MAX_HANDLE_QUERY_CONCURRENCY) {
                 LOG_WARN(yield, " too many concurrent queries");
                 continue;
             }
 
-            ++concurrency;
+            ++_concurrency;
 
             yield.spawn(
                 [
                     this,
                     sender,
-                    message_map = std::move(*message_map),
-                    &handle_query_ok,
-                    &concurrency
+                    message_map = std::move(*message_map)
                 ] (Async yield) mutable {
                     auto cleanup = defer([&] {
                         // Not sure why this `if` is needed, but we were sometimes getting memory
                         // access errors without it.
                         if (!yield.is_cancelled()) {
-                            --concurrency;
+                            --_concurrency;
                         }
                     });
 
                     auto result = handle_query(sender, message_map, yield);
                     if (!result) {
-                        handle_query_ok = false;
+                        _handle_query_ok = false;
                     }
                 }
             );
