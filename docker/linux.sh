@@ -189,17 +189,17 @@ function build_image (
     # binaries, but it's good to have them in the image
     android_sdk_packages=(
         "cmdline-tools;latest"
-        "build-tools;35.0.0"
+        "build-tools;37.0.0"
         "ndk;28.2.13676358"
         "platform-tools"
-        "platforms;android-36"
+        "platforms;android-37.0"
     )
 
     # https://developer.android.com/studio#command-tools
-    android_sdk_version=13114758
+    android_sdk_version=15859902
     android_home=$ouinet_dir/sdk
 
-    gradle_version=8.14.3
+    gradle_version=9.5.0
 
     dockerfile=(
         "FROM debian:trixie-slim"

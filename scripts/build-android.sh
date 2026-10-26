@@ -21,7 +21,7 @@ done
 shift $((OPTIND -1))
 
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-OUINET_TARGET_API=36
+OUINET_TARGET_API=37
 if [ "$ABI" = "armeabi-v7a" ]; then
     OUINET_MIN_API=26
 elif [ "$ABI" = "arm64-v8a" ]; then
@@ -53,19 +53,18 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
 PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
-SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
-SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
+ANDROID_HOME=${ANDROID_HOME:-"$DIR/sdk"}
 
 cat <<EOF
 Configuration environment variables:
 
 ABI="$ABI"
-SDK_DIR="$SDK_DIR"
+ANDROID_HOME="$ANDROID_HOME"
 
 EOF
 
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
-export OUINET_MIN_API OUINET_TARGET_API
+export ANDROID_HOME OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
