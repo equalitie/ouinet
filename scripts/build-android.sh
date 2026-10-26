@@ -10,6 +10,9 @@ ABI=${ABI:-omni}
 
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
 
+CMAKEARG_WITH_OUISYNC=${WITH_OUISYNC}
+CMAKEARG_OUISYNC_SRC_DIR=${OUISYNC_SRC_DIR}
+
 RELEASE_BUILD=0
 while getopts r option; do
     case "$option" in
@@ -21,15 +24,15 @@ shift $((OPTIND -1))
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
 OUINET_TARGET_API=36
 if [ "$ABI" = "armeabi-v7a" ]; then
-    OUINET_MIN_API=21
+    OUINET_MIN_API=26
 elif [ "$ABI" = "arm64-v8a" ]; then
-    OUINET_MIN_API=21
+    OUINET_MIN_API=26
 elif [ "$ABI" = "x86" ]; then
-    OUINET_MIN_API=21
+    OUINET_MIN_API=26
 elif [ "$ABI" = "x86_64" ]; then
-    OUINET_MIN_API=21
+    OUINET_MIN_API=26
 elif [ "$ABI" = "omni" ]; then
-    OUINET_MIN_API=21
+    OUINET_MIN_API=26
 else
     >&2 echo "Unsupported ABI: '$ABI', valid values are armeabi-v7a, arm64-v8a, x86, x86_64."
     exit 1
@@ -87,7 +90,7 @@ export OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
-export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN
+export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEARG_OUISYNC_SRC_DIR
 
 ######################################################################
 MODES=

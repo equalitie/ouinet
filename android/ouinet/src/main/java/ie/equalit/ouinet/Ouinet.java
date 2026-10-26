@@ -147,6 +147,7 @@ public class Ouinet {
         maybeAddBool(args, "--enable-i2p-service-lib", config.getEnableI2pServiceLib());
         maybeAdd(args, "--injector-ep",            config.getInjectorEp());
         maybeAddBool(args, "--drop-saved-opts", config.getDropSavedOpts());
+        maybeAdd    (args, "--ouisync-page-index", config.getOuisyncPageIndex());
 
         if (config.getLogLevel() != null) {
             args.add("--log-level=" + config.getLogLevel().name());
