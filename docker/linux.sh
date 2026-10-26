@@ -189,15 +189,17 @@ function build_image (
     # binaries, but it's good to have them in the image
     android_sdk_packages=(
         "cmdline-tools;latest"
-        "build-tools;35.0.0"
+        "build-tools;37.0.0"
         "ndk;28.2.13676358"
         "platform-tools"
-        "platforms;android-36"
+        "platforms;android-37.0"
     )
 
     # https://developer.android.com/studio#command-tools
-    android_sdk_version=13114758
+    android_sdk_version=15859902
     android_home=$ouinet_dir/sdk
+
+    gradle_version=9.5.0
 
     dockerfile=(
         "FROM debian:trixie-slim"
@@ -221,6 +223,12 @@ function build_image (
         "RUN yes | sdkmanager --licenses"
         "RUN sdkmanager --install $(printf '"%s" ' "${android_sdk_packages[@]}")"
         'ENV PATH="${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator:${PATH}"'
+
+        # Install gradle
+        "ENV GRADLE_VERSION=$gradle_version"
+        "RUN wget https://services.gradle.org/distributions/gradle-${gradle_version}-bin.zip"
+        "RUN unzip -d /opt gradle-${gradle_version}-bin.zip"
+        'ENV PATH="/opt/gradle-${GRADLE_VERSION}/bin:${PATH}"'
 
         "WORKDIR $work_dir"
         "RUN echo 'PS1=\"\\h/$container_name:\\W \\u$ \"' >> ~/.bashrc"
@@ -458,7 +466,7 @@ for target_os in ${target_oss[@]}; do
 
         exe "${opt_env[@]}" -w $ouinet_dir ./scripts/build-android.sh \
             $([ "$cmake_build_type" = "Release" ] && echo " -r") \
-            $([ "$android_publish" = "y" ] && echo " bootstrap build publish")
+            $([ "$android_publish" = "y" ] && echo " build publish")
     fi
 
     if [ -n "$artifact_dir" ]; then

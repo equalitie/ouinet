@@ -9,7 +9,6 @@ ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
-
 CMAKEARG_WITH_OUISYNC=${WITH_OUISYNC}
 CMAKEARG_OUISYNC_SRC_DIR=${OUISYNC_SRC_DIR}
 
@@ -22,7 +21,7 @@ done
 shift $((OPTIND -1))
 
 # Please read `doc/android-sdk-versions.md` and keep in sync with it.
-OUINET_TARGET_API=36
+OUINET_TARGET_API=37
 if [ "$ABI" = "armeabi-v7a" ]; then
     OUINET_MIN_API=26
 elif [ "$ABI" = "arm64-v8a" ]; then
@@ -54,39 +53,18 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
 PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
-SDK_DIR=${SDK_DIR:-"$DIR/sdk"}
-SDK_MANAGER="${SDK_DIR}/cmdline-tools/bin/sdkmanager"
-
-# Android API level, see https://redmine.equalit.ie/issues/12143
-EMULATOR_PLATFORM=android-${EMULATOR_API}
-
-EMULATOR_AVD=${EMULATOR_AVD:-ouinet-test}
-
-# The following options may be limited by availability of SDK packages,
-# to get list of all packages, use `sdkmanager --list`.
-
-# The image to be used by the emulator AVD
-EMULATOR_IMAGE_TAG=google_apis  # uses to be available for all platforms and ABIs
-EMULATOR_API=${EMULATOR_API:-$OUINET_MIN_API}
-EMULATOR_IMAGE="system-images;$EMULATOR_PLATFORM;$EMULATOR_IMAGE_TAG;$ABI"
-
-# To get list of all devices, use `avdmanager list device`.
-EMULATOR_DEV=${EMULATOR_DEV:-Nexus 6}
-EMULATOR_SKIN=1440x2560  # automatically scaled down on smaller screens
+ANDROID_HOME=${ANDROID_HOME:-"$DIR/sdk"}
 
 cat <<EOF
 Configuration environment variables:
 
 ABI="$ABI"
-SDK_DIR="$SDK_DIR"
-EMULATOR_AVD="$EMULATOR_AVD"
-EMULATOR_DEV="$EMULATOR_DEV"
-EMULATOR_API="$EMULATOR_API"
+ANDROID_HOME="$ANDROID_HOME"
 
 EOF
 
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
-export OUINET_MIN_API OUINET_TARGET_API
+export ANDROID_HOME OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
@@ -94,140 +72,14 @@ export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEA
 
 ######################################################################
 MODES=
-ALLOWED_MODES="bootstrap build emu publish"
-DEFAULT_MODES="bootstrap build"
+ALLOWED_MODES="build publish"
+DEFAULT_MODES="build"
 
 function check_mode {
     if echo "$MODES" | grep -q "\b$1\b"; then
         return 0
     fi
     return 1
-}
-
-######################################################################
-function maybe_install_sdk {
-    local toolsfile=commandlinetools-linux-13114758_latest.zip
-
-    # Reuse downloaded SDK stuff from old versions of this script.
-    if [ -d "$DIR/sdk_root" -a ! -d "$SDK_DIR" ]; then
-        mv "$DIR/sdk_root" "$SDK_DIR"
-    fi
-
-    if [ ! -f "$SDK_MANAGER" ]; then
-        echo "cannot find SDK manager: $SDK_MANAGER"
-        echo "downlodaing SDK..."
-        [ -d "$SDK_DIR/cmdline-tools" ] || rm -rf "$SDK_DIR/cmdline-tools"
-        if [ ! -f "$toolsfile" ]; then
-            # https://developer.android.com/studio/command-line/
-            wget -nv "https://dl.google.com/android/repository/$toolsfile"
-        fi
-        unzip -q "$toolsfile" -d "$SDK_DIR"
-    fi
-}
-
-function setup_sdk_deps {
-    # SDK packages needed by the different modes.
-    # To get list of all packages, use `sdkmanager --list`.
-    local sdk_pkgs
-    declare -A sdk_pkgs
-    # Build dependencies are handled by Gradle once `$ANDROID_HOME` is set.
-    sdk_pkgs[build]="
-"
-    sdk_pkgs[emu]="
-$EMULATOR_IMAGE
-platforms;$EMULATOR_PLATFORM
-platform-tools
-emulator
-"
-
-    # Collect SDK packages that need to be installed for
-    # all the modes requested in the command line.
-    local sdk_pkgs_install mode pkg
-    for mode in $ALLOWED_MODES; do
-        if check_mode $mode; then
-            for pkg in ${sdk_pkgs[$mode]}; do
-                if [ ! -d "$SDK_DIR/$(echo $pkg | tr ';' /)" ]; then
-                    sdk_pkgs_install="$sdk_pkgs_install $pkg"
-                fi
-            done
-        fi
-    done
-
-    # Filter out repeated packages.
-    sdk_pkgs_install=$(echo "$sdk_pkgs_install" | tr [:space:] '\n' | sort -u)
-    # Install missing packages.
-    if [ "$sdk_pkgs_install" ]; then
-        # This produces progress bars that are very frequently updated
-        # and clutter build logs.
-        yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR $sdk_pkgs_install > /dev/null
-    fi
-    # Accept licenses from stuff installed by Gradle on previous runs.
-    # Not very clean, but if Gradle complains about licenses not being accepted,
-    # at least a second run would succeed.
-    yes y | "$SDK_MANAGER" --sdk_root=$SDK_DIR --licenses > /dev/null
-
-    # Prefer locally installed platform tools to those in the system.
-    export PATH="$SDK_DIR/platform-tools:$PATH"
-
-    export ANDROID_HOME="$SDK_DIR"
-}
-
-######################################################################
-# Create Android virtual device for the emulator.
-function maybe_create_avd {
-    if ! "$SDK_DIR/tools/emulator" -list-avds | grep -q "^$EMULATOR_AVD$"; then
-        echo no | "$SDK_DIR/tools/bin/avdmanager" create avd -n "$EMULATOR_AVD" \
-                                                  -k "$EMULATOR_IMAGE" -g "$EMULATOR_IMAGE_TAG" \
-                                                  -b "$ABI" -d "$EMULATOR_DEV"
-    fi
-}
-
-######################################################################
-function maybe_install_gradle {
-    check_mode build || return 0
-
-    GRADLE_REQUIRED_MAJOR_VERSION=8
-    GRADLE_REQUIRED_MINOR_VERSION=14
-    GRADLE_REQUIRED_PATCH_VERSION=3
-
-    NEED_GRADLE=false
-
-    if ! command -v gradle > /dev/null; then
-       NEED_GRADLE=true
-    else
-        GRADLE_VERSION=`gradle -v | grep Gradle | cut -d ' ' -f 2`
-        GRADLE_MAJOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f1`
-        GRADLE_MINOR_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f2`
-        GRADLE_PATCH_VERSION=`echo $GRADLE_VERSION | cut -d '.' -f3`
-
-        if [ $GRADLE_REQUIRED_MAJOR_VERSION -gt $GRADLE_MAJOR_VERSION ]; then
-            NEED_GRADLE=true
-        else
-            if [ $GRADLE_REQUIRED_MAJOR_VERSION -eq $GRADLE_MAJOR_VERSION ]; then
-                 if [ $GRADLE_REQUIRED_MINOR_VERSION -gt $GRADLE_MINOR_VERSION ]; then
-                    if [ $GRADLE_REQUIRED_PATCH_VERSION -gt $GRADLE_PATCH_VERSION ]; then
-                        NEED_GRADLE=true
-                    fi
-                 fi
-             fi
-        fi
-    fi
-
-    echo need gradle? $NEED_GRADLE
-
-    if [ $NEED_GRADLE == true ]; then
-        local GRADLE=gradle-8.14.3
-        local GRADLE_ZIP=$GRADLE-bin.zip
-        if [ ! -d "$GRADLE" ]; then
-            if [ ! -f $GRADLE_ZIP ]; then
-                echo "downloading gradle..."
-                wget -nv https://services.gradle.org/distributions/$GRADLE_ZIP
-            fi
-            #TODO: Check SHA256
-            unzip -q $GRADLE_ZIP
-        fi
-        export PATH="`pwd`/$GRADLE/bin:$PATH"
-    fi
 }
 
 ######################################################################
@@ -274,47 +126,18 @@ function publish_ouinet_aar {
 }
 
 ######################################################################
-# Run the Android emulator with the AVD created above.
-# The `-use-system-libs` option is necessary to avoid errors like
-# "libGL error: unable to load driver" and X error `BadValue` on
-# `X_GLXCreateNewContext`.
-function run_emulator {
-    echo "Starting Android emulator, first boot may take more than 10 minutes..."
-    "$SDK_DIR/tools/emulator" -avd "$EMULATOR_AVD" -skin "$EMULATOR_SKIN" \
-                              -use-system-libs "$@" &
-    local emupid=$!
-    # Inspired in <https://android.stackexchange.com/q/83726>.
-    adb -e wait-for-device
-    # Candidates:
-    #   - sys.boot_completed == 1
-    #   - service.bootanim.exit == 1
-    #   - ro.runtime.firstboot != 0 (nor empty)
-    adb -e shell 'while [ "$(getprop ro.runtime.firstboot 0)" -lt 1 ]; do sleep 1; done'
-    cat << EOF
 
-The emulated Android environment is now running.
-Once you can interact with it normally, you may execute:
-
-  - To install the APK: $(command -v adb) -e install $APK
-  - To uninstall the APK: $(command -v adb) -e uninstall $APK_ID
-
-EOF
-    wait $emupid
-}
-
-######################################################################
-
-# Parse modes and leave emulator arguments.
+# Parse modes
 
 progname=$(basename "$0")
 if [ "$1" = --help ]; then
-    echo "Usage: $progname [MODE...] [-- EMULATOR_ARG...]"
+    echo "Usage: $progname [MODE...]"
     echo "Accepted values of MODE: $ALLOWED_MODES"
     echo "If no MODE is provided, assume \"$DEFAULT_MODES\"."
     exit 0
 fi
 
-while [ -n "$1" -a "$1" != -- ]; do
+while [ -n "$1" -a "$1" ]; do
     if ! echo "$ALLOWED_MODES" | grep -q "\b$1\b"; then
         echo "$progname: unknown mode \"$1\"; accepted modes: $ALLOWED_MODES" >&2
         exit 1
@@ -323,19 +146,8 @@ while [ -n "$1" -a "$1" != -- ]; do
     shift
 done
 
-if [ "$1" = -- ]; then
-    shift  # leave the rest of arguments for the emulator
-fi
-
 if [ ! "$MODES" ]; then
     MODES="$DEFAULT_MODES"
-fi
-
-if check_mode bootstrap; then
-    maybe_install_sdk
-    setup_sdk_deps
-    maybe_install_gradle
-    # TODO: miniupnp
 fi
 
 if check_mode build; then
@@ -350,9 +162,3 @@ if check_mode publish; then
       publish_ouinet_aar
     fi
 fi
-
-if check_mode emu; then
-    maybe_create_avd
-    run_emulator "$@"
-fi
-
