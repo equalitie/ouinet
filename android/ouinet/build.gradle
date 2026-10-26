@@ -1,5 +1,4 @@
 apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
 
 apply from: "${rootProject.projectDir}/build-scripts/git-version-string.gradle"
 apply from: "${rootProject.projectDir}/build-scripts/cmake-extra-args.gradle"
@@ -43,7 +42,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("String", "BUILD_ID", "\"Release ${ouinetBuildId}\"")
         }
         debug {
@@ -61,15 +60,16 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     testOptions {
         unitTests.returnDefaultValues = true
     }
     lintOptions {
         disable 'UnsafeNativeCodeLocation' // Disable warning about obfsproxy executable in assets
     }
+}
+
+kotlin {
+    jvmToolchain(21)
 }
 
 dependencies {
@@ -96,6 +96,10 @@ ext {
 
 tasks.withType(Sign) {
     onlyIf { rootProject.gradle.startParameter.taskNames.contains('publishToSonatype') }
+}
+
+tasks.withType(Test) {
+    failOnNoDiscoveredTests = false
 }
 
 apply from: "${rootProject.projectDir}/build-scripts/publish-module.gradle"
