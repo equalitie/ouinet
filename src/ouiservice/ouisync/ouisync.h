@@ -101,6 +101,11 @@ public:
     std::expected<Session, sys::error_code> load(const CacheOuisyncRetrieveRequest&, Async) {
         return std::unexpected(asio::error::operation_not_supported);
     }
+
+    [[nodiscard]]
+    std::expected<std::vector<OuisyncSocket>, sys::error_code> open_network_sockets(Async) {
+      return std::unexpected(asio::error::operation_not_supported);
+    }
 };
 
 } // namespace ouinet::ouisync_service
