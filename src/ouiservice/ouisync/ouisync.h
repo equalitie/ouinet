@@ -82,6 +82,7 @@ public:
 
 class OUINET_OUISYNC_API Ouisync {
 public:
+    Ouisync(const AsioExecutor&, boost::filesystem::path, std::string, std::vector<asio::ip::udp::endpoint>) {}
     Ouisync(boost::filesystem::path, std::string page_index_token) {}
     Ouisync(const Ouisync&) = delete;
     Ouisync(Ouisync&&) = default;
