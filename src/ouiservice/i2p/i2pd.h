@@ -39,17 +39,20 @@ public:
 
     class Config {
     public:
-        Config(fs::path i2pd_root_dir):
-            i2pd_root_dir(std::move(i2pd_root_dir))
+        // sam_port: defaults to 7656 (i2pd's own default). Ideally this
+        // would be 0 so the OS assigns a free port, but a bug in i2pd's SAMBridge
+        // derives portUDP as portTCP-1, which wraps to 65535 when portTCP
+        // is 0.
+        Config(fs::path i2pd_root_dir, uint16_t sam_port = 7656):
+            i2pd_root_dir(std::move(i2pd_root_dir)),
+            sam_port(sam_port)
         {}
-    
+
         std::vector<std::string> to_vector(Type) const;
-    
+
     private:
-        // TODO: Bind to a random port (0)
-        uint16_t sam_port = 7656;
-        //uint16_t sam_port = 0;
         fs::path i2pd_root_dir;
+        uint16_t sam_port;
     };
 
     // If these return `false` then the corresponding `start_*` functions

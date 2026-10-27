@@ -20,7 +20,8 @@ class TestFixtures:
     BEP5_CACHE_TIMEOUT = 900
     BEP3_CACHE_TIMEOUT = I2P_TRANSPORT_TIMEOUT + BEP5_CACHE_TIMEOUT
 
-    BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p"
+    #BEP3_TRACKER_ID = "z2tfkf4t23gig3nfybnat2qarjl2f7dctcj63khfluqt2fdoikpa.b32.i2p" #Zzzot
+    BEP3_TRACKER_ID = "2rkpwc6l5phjeqdxyjodbkia4b6w44vh6wemzo3hdu6ycfmraaiq.b32.i2p" #opentracker-i2p
 
     TEST_TIMEOUT = {
         "i2p_browser_test": I2P_TRANSPORT_TIMEOUT,
@@ -64,15 +65,31 @@ class TestFixtures:
         r"[\s\S]*Error in getting i2p seeder response[\s\S]*"
     )
 
+    # Each managed i2pd instance needs a distinct SAM port (i2pd's SAMBridge
+    # derives portUDP = portTCP-1, which wraps to 65535 when portTCP is 0).
+    I2P_INJECTOR_SAM_PORT = 17656
+    I2P_CLIENT_SAM_PORT   = 17657
+    # BEP3 cache test runs both cache clients with I2P; give each its own port.
+    I2P_CACHE_CLIENT_SAM_PORTS = [17658, 17659]
+
     I2P_CLIENT = {
-        "name": "i2p_client",
+        "name": "cacheless_i2p_client",
         "port": 3888,
+        # Distinct fe_port so this fixture can be run alongside CACHE_CLIENT[0]
+        # (which defaults to 8078) without a front-end port collision.
+        "fe_port": 8081,
         "i2cp_port": 7454,
     }
     I2P_DISCOVERED_ID_ANNOUNCE_PORT = 8998
 
     I2P_ANON_TUNNEL_HOP_COUNT = 3
     I2P_FAST_TUNNEL_HOP_COUNT = 1
+
+    # X-Ouinet-Route header values that force a specific transport for a
+    # request. Route::choose (src/route.cpp) defaults to Bep5Http when no
+    # such header is present, so BEP3-over-I2P tests must pass one of these.
+    PUBLIC_INJECTOR_I2P_ROUTE = {"X-Ouinet-Route": "PublicInjector Bep3HTTPOverI2P"}
+    DCACHE_I2P_ROUTE = {"X-Ouinet-Route": "DCache Bep3HTTPOverI2P"}
 
     MAX_NO_OF_I2P_CLIENTS = 5
     MAX_NO_OF_TRIAL_I2P_REQUESTS = 5
@@ -104,9 +121,34 @@ class TestFixtures:
     CACHE_CLIENT_PEER_FOUND = (
         r"[\s\S]*LocalPeerDiscovery: Found local ouinet peer[\s\S]*"
     )
+
+    # Logged by the I2P cache server in client.cpp once a peer's PROPFIND or
+    # GET has been successfully written back over the I2P stream. Used by the
+    # BEP3-over-I2P cache test to confirm the seeding client actually served
+    # the request (serve_utp_req/serve_local ENDthe uTP  never fires on the I2P cache).
+    CACHE_CLIENT_I2P_REQUEST_SERVED = (
+        r'[\s\S]*serve_i2p_req/serve_local END; ec="Success"[\s\S]*'
+    )
     BEP3_ANNOUNCER_READY_REGEX = r"[\s\S]*I2P announcer successfully initiated[\s\S]*"
+    # Logged by I2pAnnouncer::Loop in src/ouiservice/i2p/announcer.cpp once
+    # the entry has been successfully announced to the BEP3 tracker over I2P.
+    BEP3_ANNOUNCE_SUCCESS_REGEX = r"[\s\S]*BEP3 announced[\s\S]*"
+    # Logged by I2pTrackerClient::handshake in src/ouiservice/i2p/tracker.cpp
+    # once a probe round-trip to the BEP3 tracker has succeeded over I2P, i.e.
+    # the I2P path (lease-set + tunnel) is actually usable for tracker requests.
+    BEP3_HANDSHAKE_DONE_REGEX = (
+        r"[\s\S]*BEP3 tracker: tracker handshake successful[\s\S]*"
+    )
+    # Logged once in Bep3Tracker's constructor; the captured group is the
+    # 52-char base32 of our serving destination's IdentHash — i.e. the b32
+    # other clients should see as a peer for our infohash.
+    BEP3_SERVING_IDENTITY_REGEX = (
+        r"[\s\S]*BEP3 tracker: serving identity b32=([a-z2-7]{52})\.b32\.i2p[\s\S]*"
+    )
 
     FIRST_CLIENT_CONF_FILE_CONTENT = "open-file-limit = 4096\n"
+
+    RESPONSE_RECEIVED_FROM_CACHE = r"[\s\S]*X-Ouinet-Source: dist-cache[\s\S]*"
 
     IPNS_ID_ANNOUNCE_REGEX = r"[\s\S]*IPNS Index: ([A-Za-z0-9]+)[\s\S]*"
     BEP5_PUBK_ANNOUNCE_REGEX = r"[\s\S]*BEP5 Index: ([0-9A-Fa-f]+)[\s\S]*"
@@ -160,6 +202,3 @@ AzZPXqk+2eab43GbbD6keXRGIufMThKGyrRX+9aIaV3tx3uWAOfWVmlzf9w3gV3D
 lmjPSOXmUsOLk0PFwoy7O7n9zJKNrUy1N2O+j0tH5HVXOnSjpS8aNrMtpfHS
 -----END CERTIFICATE-----
 """
-
-    PUBLIC_INJECTOR_I2P_ROUTE = {'X-Ouinet-Route': 'PublicInjector Bep3HTTPOverI2P'}
-    DCACHE_I2P_ROUTE          = {'X-Ouinet-Route': 'DCache Bep3HTTPOverI2P'}

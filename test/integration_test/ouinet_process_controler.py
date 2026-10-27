@@ -82,9 +82,9 @@ def output_yielder(handle: Popen) -> Generator[str, None, None]:
         try:
             if not handle.stdout:
                 raise IOError("no stdout on process")
-            for line in iter(handle.stdout.readline, ""):
+            for line in iter(handle.stdout.readline, b""):
                 if isinstance(line, bytes):
-                    line = line.decode("utf-8")
+                    line = line.decode("utf-8", errors="replace")
                 yield line.rstrip()
         except:
             pass
@@ -404,6 +404,14 @@ class OuinetI2PInjector(OuinetInjector):
             ) as private_key_file:
                 private_key_file.write(private_key_blob)
 
+    def get_I2P_public_ID(self):
+        try:
+            with open(
+                self.config.config_folder_name + "/endpoint-i2p", "r"
+            ) as public_id_file:
+                return public_id_file.read().rstrip()
+        except:
+            return None
 
     def get_index_key(self):
         return self._proc_protocol.bep5_public_key
