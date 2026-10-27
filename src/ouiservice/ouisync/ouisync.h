@@ -70,6 +70,16 @@ namespace util::file_io {
 
 namespace ouinet::ouisync_service {
 
+
+class OUINET_OUISYNC_API OuisyncSocket : public asio_utp::abstract_udp_socket {
+public:
+  OuisyncSocket(OuisyncSocket&&) = default;
+  OuisyncSocket& operator = (OuisyncSocket&&) = default;
+
+  OuisyncSocket(const OuisyncSocket&) = delete;
+  OuisyncSocket& operator = (const OuisyncSocket&) = delete;
+};
+
 class OUINET_OUISYNC_API Ouisync {
 public:
     Ouisync(boost::filesystem::path, std::string page_index_token) {}
