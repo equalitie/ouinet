@@ -13,6 +13,7 @@ linux / build:
       --artifact-dir $BUILD_PATH
       --cmake-build-type $CMAKE_BUILD_TYPE
       --artifact-extra test/bt_bep5
+      --with-ouisync
       $CONTAINER_ARGS
   artifacts:
     paths:
@@ -33,6 +34,7 @@ linux / cpp-rust-tests:
     - >
       ./docker/linux.sh
       --target-os linux
+      --with-ouisync
       --run-cpp-rust-tests
       --exclude-test test_i2p
       --exclude-test test_i2p_fetch
@@ -53,6 +55,7 @@ linux / python-tests:
     - >
       ./docker/linux.sh
       --target-os linux
+      --with-ouisync
       --run-python-tests
       $CONTAINER_ARGS
   needs:

@@ -12,6 +12,7 @@ windows / build:
       --target-os $TARGET_OS
       --artifact-dir $BUILD_PATH
       --cmake-build-type $CMAKE_BUILD_TYPE
+      --with-ouisync
       $CONTAINER_ARGS
   artifacts:
     paths:
@@ -30,7 +31,8 @@ windows / cpp-rust-tests:
   script:
     - >
       ./docker/linux.sh
-      --target-os windows
+      --target-os $TARGET_OS
+      --with-ouisync
       --run-all-tests
       --exclude-test test_fetch
       --exclude-test test_http_store
