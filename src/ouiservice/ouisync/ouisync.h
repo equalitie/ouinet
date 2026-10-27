@@ -1,6 +1,9 @@
 #pragma once
 
+#ifdef WITH_OUISYNC
 #include "ouiservice/ouisync/socket.h"
+#endif
+
 #include "request.h"
 #include "session.h"
 #include "api.h"
