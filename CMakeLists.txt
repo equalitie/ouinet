@@ -25,7 +25,7 @@ option(WITH_TEST "Compile tests" ON)
 #       https://github.com/boostorg/coroutine/issues/30#issuecomment-325574878
 option(WITH_ASAN "Build with Address sanitizer" OFF)
 
-option(WITH_OUISYNC "Build with Ouisync" OFF)
+option(WITH_OUISYNC "Build with Ouisync" ON)
 if (APPLE)
     # iOS does not support spawning child processes, WITH_I2PD_LIB is a TODO
     # macOS is a TODO
