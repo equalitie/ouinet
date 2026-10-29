@@ -975,12 +975,13 @@ void DhtNode::receive_loop(Async yield)
                             --_concurrency;
                             LOG_WARN(yield, " YYY: yield IS NOT cancelled: ", _concurrency);
                         } else {
-                            LOG_WARN(yield, " YYY: yield IS cancelled: ", concurrency);
+                            LOG_WARN(yield, " YYY: yield IS cancelled: ", _concurrency);
                         }
                     });
 
                     auto result = handle_query(sender, message_map, yield);
                     if (!result) {
+                        LOG_WARN(yield, " YYY: Failed to handle_query: ", result.error().message());
                         _handle_query_ok = false;
                     }
                 }
