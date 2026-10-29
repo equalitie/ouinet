@@ -37,6 +37,17 @@ if (WITH_OUISYNC)
     target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_client  PRIVATE ouinet_asio)
 
+    if (APPLE)
+        # Needed by the Rust `security-framework`, `system-configuration` and
+        # `notify` (FSEvents) crates linked into ouisync_service
+        target_link_libraries(cpp_ouisync_service PRIVATE
+            "-framework Security"
+            "-framework SystemConfiguration"
+            "-framework CoreFoundation"
+            "-framework CoreServices"
+        )
+    endif()
+
     add_library(
         ouinet_ouisync
         EXCLUDE_FROM_ALL
