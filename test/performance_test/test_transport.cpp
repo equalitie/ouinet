@@ -21,6 +21,7 @@
 #include "util/wait_condition.h"
 #include "../util/test_dir.h"
 #include "logger.h"
+#include <ouisync.hpp>
 #include "ouiservice/ouisync/socket.h"
 #include "ouisync/service.hpp"
 

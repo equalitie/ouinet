@@ -10,13 +10,9 @@
 #include <expected>
 
 namespace ouinet { class Async; }
-
-#ifdef WITH_OUISYNC
-
 namespace ouisync { class FileStream; }
 
-namespace ouinet {
-namespace ouisync_service {
+namespace ouinet::ouisync_service {
 
 class OUINET_OUISYNC_API Ouisync {
 public:
@@ -54,41 +50,16 @@ private:
     ConditionVariable _impl_cv; // notified when `_impl` has been set.
 };
 
-} // namespace ouisync_service
+void init_log();
+bool is_implemented();
+
+} // namespace
+
+namespace ouinet {
 
 namespace util::file_io {
     [[nodiscard]] std::expected<size_t, sys::error_code> file_size(ouisync::FileStream& file);
     [[nodiscard]] std::expected<void, sys::error_code> fseek(ouisync::FileStream& file, size_t pos);
 } // namespace util::file_io
 
-} // namespace ouinet
-
-#else // ifdef WITH_OUISYNC
-
-namespace ouinet::ouisync_service {
-
-class OUINET_OUISYNC_API Ouisync {
-public:
-    Ouisync(boost::filesystem::path, std::string page_index_token) {}
-    Ouisync(const Ouisync&) = delete;
-    Ouisync(Ouisync&&) = default;
-    Ouisync operator=(const Ouisync&) = delete;
-
-    [[nodiscard]]
-    sys::error_code start(Async) {
-        return asio::error::operation_not_supported;
-    }
-
-    void stop() {}
-
-    bool is_running() const { return false; }
-
-    [[nodiscard]]
-    std::expected<Session, sys::error_code> load(const CacheOuisyncRetrieveRequest&, Async) {
-        return std::unexpected(asio::error::operation_not_supported);
-    }
-};
-
-} // namespace ouinet::ouisync_service
-
-#endif // ifdef WITH_OUISYNC
+} // namespace
