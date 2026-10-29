@@ -188,10 +188,6 @@ function(ouinet_setup)
 
     list(APPEND ARG_DEFS BOOST_ASIO_SEPARATE_COMPILATION)
 
-    if (WITH_OUISYNC)
-        list(APPEND ARG_DEFS WITH_OUISYNC)
-    endif()
-
     get_target_property(ASIO_UTP_INCLUDE_DIRECTORIES asio_utp INCLUDE_DIRECTORIES)
     get_target_property(CPP_UPNP_INCLUDE_DIRECTORIES cpp_upnp INCLUDE_DIRECTORIES)
 

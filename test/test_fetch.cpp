@@ -4,7 +4,6 @@
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/asio/ssl.hpp>
-#include <ouisync/service.hpp>
 #include <boost/beast/version.hpp>
 
 #include "client.h"
@@ -23,6 +22,7 @@
 #include "injector.h"
 #include "client.h"
 #include "swarm_calculator.h"
+#include "ouiservice/ouisync/ouisync.h"
 #include "util/random.h"
 #include "ssl/util.h"
 
@@ -395,7 +395,16 @@ BOOST_DATA_TEST_CASE(
     resource_count
 ) {
     get_logger().set_threshold(INFO);
-    ouisync::init_log();
+
+    if (!std::string_view(ouisync_transport_flag).empty()) {
+        if (ouisync_service::is_implemented()) {
+            ouisync_service::init_log();
+        }
+        else {
+            LOG_WARN("Skipping test with Ouisync transport because it's not implemented");
+            return;
+        }
+    }
 
     LOG_INFO(
         " dht_impl=", dht_impl,
@@ -658,7 +667,13 @@ BOOST_DATA_TEST_CASE(
     get_logger().set_threshold(DEBUG);
 
     if (!std::string_view(ouisync_transport_flag).empty()) {
-        ouisync::init_log();
+        if (ouisync_service::is_implemented()) {
+            ouisync_service::init_log();
+        }
+        else {
+            LOG_WARN("Skipping test with Ouisync transport because it's not implemented");
+            return;
+        }
     }
 
     LOG_INFO(
