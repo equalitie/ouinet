@@ -24,6 +24,7 @@
 #include "ouisync/service.hpp"
 #include "util/random.h"
 #include "util/wait_condition.h"
+#include <ouisync.hpp>
 
 namespace po = boost::program_options;
 namespace asio = boost::asio;

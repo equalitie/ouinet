@@ -77,6 +77,18 @@ if (WITH_OUISYNC)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
 else()
-    add_library(ouinet_ouisync INTERFACE EXCLUDE_FROM_ALL)
-    target_include_directories(ouinet_ouisync INTERFACE "${CMAKE_SOURCE_DIR}/src")
+    add_library(
+        ouinet_ouisync
+        EXCLUDE_FROM_ALL
+        OBJECT
+        "ouisync_noop.cpp"
+        "socket_noop.cpp"
+    )
+    ouinet_setup(TARGET ouinet_ouisync
+        # TODO: `ouinet_rs` is only because `ouisync.h` includes some
+        # `ouinet_rs` headers and linking with it will import the include
+        # paths.
+        LINK PRIVATE ouinet_rs
+        DEFS OUINET_API_OUISYNC_EXPORT
+    )
 endif()

@@ -5,8 +5,11 @@
 #include <boost/test/unit_test.hpp>
 #include <chrono>
 #include <iomanip>
+
+#ifdef WITH_OUISYNC
 #include <ouisync.hpp>
 #include <ouisync/service.hpp>
+#endif
 
 #define private public
 #include "bittorrent/dht_node.h"
@@ -156,10 +159,12 @@ BOOST_AUTO_TEST_CASE(test_local) {
   });
 }
 
+#ifdef WITH_OUISYNC
+
 // Run DHT using Ouisync as the network transport.
 BOOST_AUTO_TEST_CASE(test_ouisync) {
   get_logger().set_threshold(DEBUG);
-  ouisync::init_log();
+  ouisync_service::init_log();
 
   const int node_count = 2;
 
@@ -226,3 +231,5 @@ BOOST_AUTO_TEST_CASE(test_ouisync) {
     }
   });
 }
+
+#endif // ifdef WITH_OUISYNC

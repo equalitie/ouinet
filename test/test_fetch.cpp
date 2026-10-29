@@ -5,11 +5,11 @@
 #include <boost/test/data/monomorphic.hpp>
 #include <boost/test/data/test_case.hpp>
 #include <boost/test/unit_test.hpp>
-#include <ouisync/service.hpp>
 
 #include "client.h"
 #include "injector.h"
 #include "logger.h"
+#include "ouiservice/ouisync/ouisync.h"
 #include "ssl/util.h"
 #include "swarm_calculator.h"
 #include "util/dht.h"
@@ -400,7 +400,16 @@ BOOST_DATA_TEST_CASE(test_storing_into_and_fetching_from_the_cache,
                      dht_impl, ouisync_transport_flag, seeder_count,
                      leecher_count, resource_count) {
   get_logger().set_threshold(INFO);
-  ouisync::init_log();
+
+  if (!std::string_view(ouisync_transport_flag).empty()) {
+    if (ouisync_service::is_implemented()) {
+      ouisync_service::init_log();
+    } else {
+      LOG_WARN(
+          "Skipping test with Ouisync transport because it's not implemented");
+      return;
+    }
+  }
 
   LOG_INFO(" dht_impl=", dht_impl, " flags=", ouisync_transport_flag,
            " seeder_count=", seeder_count, " leecher_count=", leecher_count,
@@ -635,7 +644,13 @@ BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
   get_logger().set_threshold(DEBUG);
 
   if (!std::string_view(ouisync_transport_flag).empty()) {
-    ouisync::init_log();
+    if (ouisync_service::is_implemented()) {
+      ouisync_service::init_log();
+    } else {
+      LOG_WARN(
+          "Skipping test with Ouisync transport because it's not implemented");
+      return;
+    }
   }
 
   LOG_INFO(" dht_impl=", dht_impl, " flags=", ouisync_transport_flag);

@@ -37,6 +37,10 @@ function(add_test)
     list(APPEND tmp ${ARG_TARGET})
     set(OUINET_TEST_TARGETS ${tmp} PARENT_SCOPE)
 
+    if (WITH_OUISYNC)
+        list(APPEND ARG_DEFS WITH_OUISYNC)
+    endif()
+
     if (NOT ARG_TARGET_SRC)
         set(ARG_TARGET_SRC ${ARG_TARGET}.cpp)
     endif()
@@ -117,7 +121,9 @@ add_test(TARGET test_atomic_temp)
 #       )
 #endif()
 
-add_test(TARGET test_transport TARGET_SRC "performance_test/test_transport.cpp")
+if (WITH_OUISYNC)
+    add_test(TARGET test_transport TARGET_SRC "performance_test/test_transport.cpp")
+endif()
 
 add_test(TARGET test_bencoding)
 

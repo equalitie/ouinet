@@ -321,6 +321,10 @@ bool Ouisync::is_running() const { return _impl != nullptr; }
 
 void Ouisync::stop() { auto impl = std::move(_impl); }
 
+void init_log() { ouisync::init_log(); }
+
+bool is_implemented() { return true; }
+
 } // namespace ouinet::ouisync_service
 
 namespace ouinet::util::file_io {
