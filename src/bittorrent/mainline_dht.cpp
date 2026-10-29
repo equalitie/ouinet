@@ -993,6 +993,7 @@ void DhtNode::receive_loop(Async yield)
             }
         }
     }
+    LOG_WARN(yield, " YYY: Stopping receive_loop of DhtNode: ", this->node_id());
 }
 
 void DhtNode::store_contacts_loop(Async yield)
