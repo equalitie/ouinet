@@ -197,7 +197,7 @@ function build_image (
 
     # https://developer.android.com/studio#command-tools
     android_sdk_version=15859902
-    android_home=$ouinet_dir/sdk
+    android_home=$work_dir/android-sdk
 
     gradle_version=9.5.0
 
