@@ -13,6 +13,8 @@
 #include "util/str.h"
 #include "util/trace.h"
 
+#include <ouisync.hpp>
+
 namespace asio = boost::asio;
 namespace ip = boost::asio::ip;
 using boost::system::error_code;

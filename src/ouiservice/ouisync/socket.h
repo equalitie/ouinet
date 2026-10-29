@@ -3,10 +3,13 @@
 #include <asio_utp/udp_socket.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <expected>
-#include <ouisync.hpp>
 
 #include "util/async.h"
 #include "util/trace.h"
+
+namespace ouisync {
+    class Session;
+}
 
 namespace ouinet::ouisync_service {
 
