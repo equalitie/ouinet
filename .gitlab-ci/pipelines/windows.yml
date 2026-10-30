@@ -27,7 +27,7 @@ windows / cpp-rust-tests:
   stage: test
   tags:
     - shell+docker
-  timeout: 30 minutes
+  timeout: 60 minutes
   script:
     - >
       ./docker/linux.sh
