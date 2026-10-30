@@ -42,7 +42,7 @@ linux / cpp-rust-tests:
     - job: 'linux / build'
       artifacts: false
   rules:
-    - !reference [.required_job, rules]
+    - !reference [.manual_job, rules]
 
 linux / python-tests:
   stage: test
