@@ -47,6 +47,11 @@ corrosion_set_env_vars(ouinet_rs "CXXFLAGS=${OUINET_RS_CXXFLAGS}")
 
 add_dependencies(cargo-prebuild_ouinet_rs ouinet_asio)
 
+corrosion_link_libraries(ouinet_rs ouinet_asio)
+if (WIN32 OR MINGW)
+    corrosion_link_libraries(ouinet_rs bcrypt)
+endif()
+
 if ("${CMAKE_GENERATOR}" STREQUAL "Xcode")
     corrosion_set_env_vars(ouinet_rs
         "LIBRARY_PATH=${CMAKE_OSX_SYSROOT}/usr/lib")
