@@ -982,6 +982,13 @@ void DhtNode::receive_loop(Async yield)
                     auto result = handle_query(sender, message_map, yield);
                     if (!result) {
                         LOG_WARN(yield, " YYY: Failed to handle_query: ", result.error().message());
+                        if (result.error() == asio::error::operation_aborted) {
+                            if (yield.is_cancelled()) {
+                                LOG_WARN(yield, " YYY: cancel came from above");
+                            } else {
+                                LOG_WARN(yield, " YYY: cancel came from below");
+                            }
+                        }
                         _handle_query_ok = false;
                     }
                 }
