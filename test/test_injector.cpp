@@ -86,7 +86,10 @@ BOOST_AUTO_TEST_CASE(
     Injector injector(
       make_config<InjectorConfig>({
         "./no_injector_exec"s,
-        "--log-level=DEBUG",
+        // This test produces a huge number of `LOG_WARN` lines from inside
+        // `mainline_dht.cpp`, if they are printed on the CI the log output
+        // exceeds the maximum limit and we won't see anything else.
+        "--log-level=ERROR",
         "--repo"s, root.make_subdir("injector").string(),
         "--listen-on-utp=0.0.0.0:"s + to_string(injector_ep.port()),
         // TODO: bind to random port
