@@ -143,6 +143,10 @@ public:
 private:
     void setup_ed25519_private_key(const std::string& hex);
 
+    bool _is_log_file_enabled();
+
+    void _is_log_file_enabled(bool v);
+
     bool _is_http_log_file_enabled() const;
 
     void _is_http_log_file_enabled(bool v);

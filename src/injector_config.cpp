@@ -15,6 +15,9 @@ auto i2p_destination_keypair_file_name = "i2p_destination_keypair.json";
 
 namespace ouinet {
 
+#define _LOG_FILE_NAME "log.txt"
+static const fs::path log_file_name{_LOG_FILE_NAME};
+
 boost::program_options::options_description InjectorConfig::options_description()
 {
     namespace po = boost::program_options;
@@ -101,6 +104,27 @@ boost::program_options::options_description InjectorConfig::options_description(
     return desc;
 }
 
+bool InjectorConfig::_is_log_file_enabled() {
+  return get_logger().get_log_file() != nullptr;
+}
+
+void InjectorConfig::_is_log_file_enabled(bool v) {
+  if (!v) {
+    get_logger().log_to_file("");
+    return;
+  }
+
+  if (_is_log_file_enabled()) return;
+
+  auto current_log_path = get_logger().current_log_file();
+  auto ouinet_log_path = current_log_path.empty()
+      ? (_repo_root / log_file_name).string()
+      : current_log_path;
+
+  get_logger().log_to_file(ouinet_log_path);
+  LOG_INFO("Log file set to: ", ouinet_log_path);
+}
+
 bool InjectorConfig::_is_http_log_file_enabled() const {
     return http_logger.get_log_file() != nullptr;
 }
@@ -180,6 +204,10 @@ InjectorConfig::InjectorConfig(int argc, const char**argv)
         get_logger().set_threshold(*ll_o);
         LOG_INFO("Log level set to: ", level);
     }
+    // TODO: Enabled by default until config value `enable-log-file` is added
+    //if (vm["enable-log-file"].as<bool>()) {
+      _is_log_file_enabled(true);
+    //}
 
     if (vm["enable-http-log-file"].as<bool>()) {
         _is_http_log_file_enabled(true);
