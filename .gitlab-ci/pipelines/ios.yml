@@ -2,8 +2,8 @@ include:
   - .gitlab-ci/jobs/common/prepare-macos-image.yml
 
 variables:
-  IOS_BUILD_PATH: 'build.darwin/build-os64/Debug-iphoneos'
-  SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug-iphonesimulator'
+  IOS_BUILD_PATH: 'build.darwin/build-os64/Debug'
+  SIM_BUILD_PATH: 'build.darwin/build-simulatorarm64/Debug'
   HOMEBREW_NO_AUTO_UPDATE: 1
 
 iphoneos / build:
@@ -14,10 +14,11 @@ iphoneos / build:
     - job: 'macos / build'
   artifacts:
     paths:
-      - $IOS_BUILD_PATH/ouinet.framework
-      - $IOS_BUILD_PATH/ouinet.framework.dSYM
-      - $IOS_BUILD_PATH/injector.app
-      - $IOS_BUILD_PATH/lib*.a
+      - ${IOS_BUILD_PATH}-iphoneos/*.framework
+      - ${IOS_BUILD_PATH}-iphoneos/*.framework.dSYM
+      - ${IOS_BUILD_PATH}-iphoneos/lib*.a
+      - ${IOS_BUILD_PATH}/asio_utp.framework
+      - ${IOS_BUILD_PATH}/asio_utp.framework.dSYM
       - build.darwin/xcodebuild-ios.log
     expire_in: 6h
   script:
@@ -35,10 +36,11 @@ iphonesimulator / build:
     - job: 'macos / build'
   artifacts:
     paths:
-      - $SIM_BUILD_PATH/ouinet.framework
-      - $SIM_BUILD_PATH/ouinet.framework.dSYM
-      - $SIM_BUILD_PATH/injector.app
-      - $SIM_BUILD_PATH/lib*.a
+      - ${SIM_BUILD_PATH}-iphonesimulator/*.framework
+      - ${SIM_BUILD_PATH}-iphonesimulator/*.framework.dSYM
+      - ${SIM_BUILD_PATH}-iphonesimulator/lib*.a
+      - ${SIM_BUILD_PATH}/asio_utp.framework
+      - ${SIM_BUILD_PATH}/asio_utp.framework.dSYM
       - build.darwin/xcodebuild-iossim.log
     expire_in: 6h
   script:
