@@ -666,14 +666,20 @@ BOOST_DATA_TEST_CASE(
 ) {
     get_logger().set_threshold(DEBUG);
 
-    if (!std::string_view(ouisync_transport_flag).empty()) {
+    bool use_ouisync_transport = !std::string_view(ouisync_transport_flag).empty();
+
+    auto fetch_timeout = 10s;
+
+    if (use_ouisync_transport) {
         if (ouisync_service::is_implemented()) {
             ouisync_service::init_log();
         }
         else {
-            LOG_WARN("Skipping test with Ouisync transport because it's not implemented");
+            LOG_WARN("Skipping test with Ouisync transport because WITH_OUISYNC=OFF");
             return;
         }
+        // Currently uTP over ouisync transport is slower than over raw UDP.
+        fetch_timeout = 20s;
     }
 
     LOG_INFO(
@@ -756,7 +762,7 @@ BOOST_DATA_TEST_CASE(
         for (uint16_t j = 0; j < concurrency; ++j) {
             yield.spawn([&, lock = wc.lock()] (Async yield) {
                 for (uint16_t i = 0; i < fetch_count; ++i) {
-                    auto rs = unwrap(timeout(10s, [&] (Async yield) {
+                    auto rs = unwrap(timeout(fetch_timeout, [&] (Async yield) {
                             return fetch_through_client(client, rq, yield);
                         }, yield));
 
