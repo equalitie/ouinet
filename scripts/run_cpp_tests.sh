@@ -62,7 +62,7 @@ function get_subtest {( echo $1 | cut -s -d':' -f2 )}
 function collect_targets {(
     if [ -z "${TEST_SPECS[@]}" ]; then
         if [ -f "$BUILD_DIR/build.ninja" ]; then
-            cmake --build $BUILD_DIR --target help | grep '^test_' | cut -d: -f 1
+            ninja -C $BUILD_DIR -t targets all | sed -n 's/^\([^:]*\/\)*\(test_[^:/]*\): [A-Z]*_EXECUTABLE_LINKER__.*/\2/p'
         else
             cmake --build $TEST_DIR --target help | grep '^\.\.\. test' | sed 's/^\.\.\. \(.*\)/\1/g' | grep -v '\.'
         fi
@@ -127,18 +127,6 @@ function run_windows_test {(
     wine $test "$@"
 )}
 
-function is_configured_for_windows {(
-    cmake_cache_file=$BUILD_DIR/CMakeCache.txt 
-    if [ ! -f $cmake_cache_file ]; then
-        error "CMakeCache.txt not found in $BUILD_DIR"
-    fi
-    if cat $cmake_cache_file | grep 'CMAKE_LINKER:FILEPATH' | grep mingw32 > /dev/null; then
-        echo y
-    else
-        echo n
-    fi
-)}
-
 function run_test {(
     bin=$1
     if [[ "$bin" == *.exe ]]; then
@@ -163,10 +151,6 @@ if [ -z "${TEST_SPECS[*]}" ]; then
     TEST_SPECS="${TEST_TARGETS}"
 fi
 
-if [ "$(is_configured_for_windows)" == y ]; then
-    BIN_SUFFIX=.exe
-fi
-
 TEST_RESULTS=()
 
 RESULT_OK="OK"
@@ -178,7 +162,7 @@ for spec in ${TEST_SPECS[@]}; do
     target=$(get_target $spec)
     subtest=$(get_subtest $spec)
 
-    if is_in $target ${EXCLUDED_TESTS[@]}; then
+    if is_in ${target%.exe} ${EXCLUDED_TESTS[@]}; then
         echo "Skipped test $spec"
         TEST_RESULTS+=("$RESULT_SKIPPED" $spec)
         continue
@@ -188,7 +172,7 @@ for spec in ${TEST_SPECS[@]}; do
         subtest_arg="--run_test=$subtest"
     fi
 
-    test_binary=$TEST_DIR/$target$BIN_SUFFIX
+    test_binary=$TEST_DIR/$target
 
     if [ ! -f $test_binary ]; then
         TEST_RESULTS+=("$RESULT_NOT_FOUND" $spec)
