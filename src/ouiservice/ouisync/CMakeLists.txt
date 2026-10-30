@@ -19,7 +19,7 @@ if (WITH_OUISYNC)
         FetchContent_Declare(
             ouisync
             GIT_REPOSITORY "https://github.com/equalitie/ouisync"
-            GIT_TAG        "e2d472973efffae1e9b8b89d7d922067847191ca"
+            GIT_TAG        "254debf70ae21c951355ed3be6fdbe259e39e2fa"
         )
 
         FetchContent_MakeAvailable(ouisync)
@@ -36,17 +36,6 @@ if (WITH_OUISYNC)
     target_link_libraries(cpp_ouisync_common  PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_service PRIVATE ouinet_asio)
     target_link_libraries(cpp_ouisync_client  PRIVATE ouinet_asio)
-
-    if (APPLE)
-        # Needed by the Rust `security-framework`, `system-configuration` and
-        # `notify` (FSEvents) crates linked into ouisync_service
-        target_link_libraries(cpp_ouisync_service PRIVATE
-            "-framework Security"
-            "-framework SystemConfiguration"
-            "-framework CoreFoundation"
-            "-framework CoreServices"
-        )
-    endif()
 
     add_library(
         ouinet_ouisync
