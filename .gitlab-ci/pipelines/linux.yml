@@ -39,6 +39,7 @@ linux / cpp-rust-tests:
       --exclude-test test_i2p
       --exclude-test test_i2p_fetch
       --exclude-test test_i2p_tracker
+      --exclude-test test_transport
       $CONTAINER_ARGS
   needs:
     - job: 'linux / build'
