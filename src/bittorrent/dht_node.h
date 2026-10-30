@@ -273,8 +273,6 @@ private:
   std::unique_ptr<DataStore> _data_store;
   bool _ready;
   Cancel _cancel;
-  bool _handle_query_ok;
-  int _concurrency;
 
   struct ActiveRequest {
     udp::endpoint destination;
@@ -296,6 +294,9 @@ private:
   PeerFilter _peer_filter = PeerFilter::martian;
   metrics::DhtNode _metrics;
   Trace _trace;
+
+  int _concurrency;
+  bool _handle_query_ok;
 };
 
 } // namespace bittorrent
