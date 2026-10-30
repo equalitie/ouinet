@@ -162,6 +162,10 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
 
             _socket.async_send_to(buffer(entry->message), entry->to, yield[ec]);
 
+            if (ec) {
+                LOG_WARN(" YYY: UdpMultiplexer::sending_loop error:", ec.message());
+            }
+
             if (terminated) break;
 
             if (!ec) {
@@ -224,6 +228,7 @@ void UdpMultiplexer::maintain_max_rate_bytes_per_sec( float current_rate
 inline
 UdpMultiplexer::~UdpMultiplexer()
 {
+    LOG_WARN(" YYY: UdpMultiplexer::~UdpMultiplexer()");
     _terminate_signal();
 
     sys::error_code ec;
@@ -262,7 +267,12 @@ void UdpMultiplexer::send(
     condition.wait(yield);
 
     if (cancelled || terminated) {
+        LOG_WARN(" YYY: UdpMultiplexer::send setting ec to operation aborted ", bool(cancelled), " ", bool(terminated));
         *ec = asio::error::operation_aborted;
+    }
+
+    if (*ec) {
+        LOG_WARN(" YYY: UdpMultiplexer::send returns with error ", ec->message());
     }
 
     return or_throw(yield, *ec);
