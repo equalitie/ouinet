@@ -53,8 +53,8 @@ private:
   ConditionVariable _impl_cv; // notified when `_impl` has been set.
 };
 
-void init_log();
-bool is_implemented();
+OUINET_OUISYNC_API void init_log();
+OUINET_OUISYNC_API bool is_implemented();
 
 } // namespace ouinet::ouisync_service
 
