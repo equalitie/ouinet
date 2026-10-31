@@ -860,7 +860,9 @@ void listen( InjectorConfig& config
     OriginPools origin_pools;
 
     while (true) {
+        LOG_WARN(" YYY: ouinet::listen before proxy_server.accept");
         auto connection = proxy_server.accept(yield);
+        LOG_WARN(" YYY: ouinet::listen after proxy_server.accept");
 
         if (!connection.has_value()) {
             async_sleep(std::chrono::milliseconds(100), yield);
