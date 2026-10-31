@@ -119,8 +119,8 @@ option(ASIO_UTP_WITH_EXAMPLES          "" OFF)
 option(ASIO_UTP_DEBUG_LOGGING          "" OFF)
 option(UTP_DEBUG_LOGGING               "" OFF)
 
+set(ASIO_UTP_SEPARATE_ASIO_COMPILATION ON)
 add_subdirectory(./modules/asio-utp)
-
 target_link_libraries(asio_utp PUBLIC ouinet_asio)
 
 set_target_properties(asio_utp PROPERTIES
