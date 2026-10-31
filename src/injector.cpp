@@ -1102,7 +1102,11 @@ Injector::Injector(
         cancel = _cancel,
         trace = _inner->_trace
     ] (asio::yield_context yield) mutable {
-        listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, trace));
+       try {
+         listen(_config, _dns_resolver, *proxy_server, Async(yield, cancel, trace));
+       } catch ( std::exception& ex ) {
+         LOG_WARN(" YYY: Injector::Injector exception while running ouinet::listen(): ", ex.what());
+       }
     });
 }
 
