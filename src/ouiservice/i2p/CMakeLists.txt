@@ -19,10 +19,10 @@ if (WITH_I2PD)
 
         set(WITH_GUI OFF)
         set(BUILD_TESTING OFF)
-    
+
         if (MINGW)
             set(WITH_STATIC ON)
-    
+
             # HACK: `find_package(ZLIB)` used by i2pd can't find pre-installed
             # zlib on msys64 for some reason.
             find_package(ZLIB QUIET)
@@ -31,19 +31,19 @@ if (WITH_I2PD)
                 set(ZLIB_INCLUDE_DIR c:/msys64/usr/include)
             endif()
         endif()
-    
+
         add_subdirectory(./i2pd/build)
     endblock()
-    
-    if (MINGW)                                                                                                                                          
-        # mingw-w64 GCC's libstdc++.a (tinfo.o) and Boost's c++23 object files                                                                                          
-        # both emit a non-weak definition of std::type_info::operator==,                                                                                                
-        # causing a "multiple definition" link error (GCC bug 110572). Both                                                                                             
-        # definitions are identical implementations of the same standard                                                                                                
-        # function, so it's safe to let the linker keep either one.                                                                                                     
-        target_link_options(i2pd PRIVATE -Wl,--allow-multiple-definition)                                                                                               
+
+    if (MINGW)
+        # mingw-w64 GCC's libstdc++.a (tinfo.o) and Boost's c++23 object files
+        # both emit a non-weak definition of std::type_info::operator==,
+        # causing a "multiple definition" link error (GCC bug 110572). Both
+        # definitions are identical implementations of the same standard
+        # function, so it's safe to let the linker keep either one.
+        target_link_options(i2pd PRIVATE -Wl,--allow-multiple-definition)
         set(MINGW_EXTRA iphlpapi)
-    endif()     
+    endif()
 
     # We build our own boost and openssl, so make sure those are built before i2pd
     # starts building so it can use those. Normally this should be automatic, but i2pd
@@ -58,17 +58,17 @@ if (WITH_I2PD)
         add_dependencies(libi2pdclient built_openssl)
         add_dependencies(libi2pdlang built_openssl)
     endif()
-    
+
     if(POLICY CMP0079)
         # Allows adding the libraries below
         # https://stackoverflow.com/a/75246115/273348
         cmake_policy(SET CMP0079 NEW)
     endif()
-    
+
     target_link_libraries(libi2pd       PUBLIC ouinet_asio Boost::program_options ${MINGW_EXTRA})
     target_link_libraries(libi2pdclient PUBLIC ouinet_asio Boost::program_options Boost::json ${MINGW_EXTRA})
     target_link_libraries(libi2pdlang   PUBLIC)
-    
+
     if (ANDROID)
         target_compile_definitions(i2pd PRIVATE ANDROID_BINARY=1)
     endif()
@@ -163,29 +163,4 @@ if (WITH_I2PD_EXE)
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
-endif()
-
-################################################################################
-if (WITH_I2PD AND ANDROID)
-    externalproject_add(android-ifaddrs
-        GIT_REPOSITORY https://github.com/PurpleI2P/android-ifaddrs
-        GIT_TAG 8f9a87cd8d1a9c0cd1219f1ab9ef4ad1947cae30
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND ""
-        INSTALL_COMMAND ""
-        PREFIX "android-ifaddrs"
-        BUILD_BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/android-ifaddrs/src/android-ifaddrs/ifaddrs.c
-    )
-
-    target_include_directories(libi2pd
-        PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/android-ifaddrs/src/android-ifaddrs
-    )
-    add_dependencies(libi2pd android-ifaddrs)
-
-    add_library(ifaddrs STATIC
-        ${CMAKE_CURRENT_BINARY_DIR}/android-ifaddrs/src/android-ifaddrs/ifaddrs.c
-    )
-    add_dependencies(ifaddrs android-ifaddrs)
-    set_target_properties(ifaddrs PROPERTIES LINKER_LANGUAGE C)
-    target_link_libraries(libi2pd PRIVATE ifaddrs)
 endif()
