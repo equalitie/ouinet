@@ -45,8 +45,7 @@ using Request = http::request<http::string_body>;
 using Response = http::response<http::string_body>;
 
 const util::Url test_url =
-    util::Url::from(
-        "https://gitlab.com/ceno-app/ceno-android/-/raw/main/LICENSE")
+    util::Url::from("https://gitlab.com/equalitie/ouinet/-/raw/main/LICENSE")
         .value();
 
 Request build_cache_request(util::Url url, Route route, std::string group) {
@@ -180,6 +179,7 @@ BOOST_AUTO_TEST_CASE(test_fetching_from_ouisync) {
                 root.make_subdir("injector").string(),
                 "--credentials"s,
                 injector_credentials,
+                "--listen-on-utp-tls=127.0.0.1:0",
                 "--trace-root=injector",
             }),
             ctx,
