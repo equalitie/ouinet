@@ -29,18 +29,28 @@ windows / cpp-rust-tests:
     - shell+docker
   timeout: 60 minutes
   script:
-    - >
-      ./docker/linux.sh
-      --target-os windows
-      --with-ouisync
-      --run-all-tests
-      --exclude-test test_fetch
-      --exclude-test test_http_store
-      --exclude-test test_i2p
-      --exclude-test test_i2p_fetch
-      --exclude-test test_i2p_tracker
-      --exclude-test test_transport
-      $CONTAINER_ARGS
+    - |
+      excluded_cpp_tests=(
+        test_fetch
+        test_http_store
+        # TODO: Ignoring test_ouisync because tests run with Wine and quinn-rs
+        # has issues with it
+        test_ouisync
+        # TODO: I2P tests don't work well yet without an already running and
+        # bootstrapped I2P service on the machine.
+        test_i2p
+        test_i2p_fetch
+        test_i2p_tracker
+        # TODO: This one does not use Boost.Test framework and as such requires
+        # different command line arguments.
+        test_transport
+      )
+      ./docker/linux.sh \
+        --target-os windows \
+        --with-ouisync \
+        --run-all-tests \
+        ${excluded_cpp_tests[@]/#/--exclude-test } \
+        $CONTAINER_ARGS
   needs:
     - job: 'windows / build'
       artifacts: false
