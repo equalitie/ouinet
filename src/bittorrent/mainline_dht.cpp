@@ -64,7 +64,7 @@ namespace accum = boost::accumulators;
 using Clock = std::chrono::steady_clock;
 namespace fs = boost::filesystem;
 
-#define DEBUG_SHOW_MESSAGES 1
+#define DEBUG_SHOW_MESSAGES 0
 
 // Max number of queries that can be handled concurrently. When this number is reached, any incoming
 // queries are ignored.
