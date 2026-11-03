@@ -9,6 +9,7 @@
 #include "util/async.h"
 #include "task.h"
 #include "async_sleep.h"
+#include "logger.h"
 
 namespace ouinet {
 using namespace std;
@@ -91,6 +92,8 @@ void OuiServiceServer::stop_listen()
 std::expected<GenericStream, sys::error_code>
 OuiServiceServer::accept(Async yield)
 {
+    LOG_DEBUG("YYY: begin ouinet::OuiServiceServer::accept");
+    LOG_DEBUG("YYY: _connection_queue size: ", _connection_queue.size());
     if (_connection_queue.empty()) {
         if (auto r = _connection_available.wait(yield); !r) {
             return std::unexpected(r.error());

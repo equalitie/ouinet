@@ -865,6 +865,7 @@ void listen( InjectorConfig& config
         LOG_WARN(" YYY: ouinet::listen after proxy_server.accept");
 
         if (!connection.has_value()) {
+            LOG_WARN(" YYY: !connection.value(), wait and continue");
             async_sleep(std::chrono::milliseconds(100), yield);
             continue;
         }
@@ -880,6 +881,7 @@ void listen( InjectorConfig& config
             connection_id,
             lock = shutdown_connections.lock()
         ] (Async yield) mutable {
+            LOG_DEBUG("YYY: before ouinet::serve()");
             serve( config
                  , dns_resolver
                  , std::move(connection)
@@ -888,6 +890,7 @@ void listen( InjectorConfig& config
                  , yield.tag(util::str('C', connection_id)));
         });
     }
+    LOG_DEBUG("YYY: end ouinet::listen");
 }
 
 //------------------------------------------------------------------------------
