@@ -200,6 +200,7 @@ UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer&& s, const uint32_t rx_
             _rc_rx.update(size);
             recv += size;
             if (_rx_limit > 0) {
+                LOG_DEBUG("YYY: Maintain max rate per sec for RX");
                 maintain_max_rate_bytes_per_sec(_rc_rx.rate(), _rx_limit, yield[ec]);
                 if (terminated) return;
             }

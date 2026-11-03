@@ -67,7 +67,8 @@ public:
     uint32_t udp_mux_rx_limit_in_bytes() const {
         // The value is set in Kbps in the configuration but required in bytes
         // by `UdpMultiplexer::maintain_max_rate_bytes_per_sec`.
-        return _udp_mux_rx_limit * 1000 / 8;
+        //return _udp_mux_rx_limit * 1000 / 8;
+        return 0;
     }
 
     boost::optional<size_t> open_file_limit() const
