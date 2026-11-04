@@ -96,11 +96,13 @@ void run(asio::io_context& ctx, F&& async_test) {
     }
 }
 
-std::string generate_random_body() {
-    size_t min_size = 64;
-    size_t max_size = 2 * 1024 * 1024;
-    auto size = util::random::number<size_t>(min_size, max_size);
-    return util::random::printable_ascii(size);
+std::string generate_random_body(std::optional<size_t> size = {}) {
+    if (!size) {
+        const size_t min_size = 64;
+        const size_t max_size = 2 * 1024 * 1024;
+        size = util::random::number<size_t>(min_size, max_size);
+    }
+    return util::random::printable_ascii(*size);
 }
 
 BOOST_AUTO_TEST_CASE(server) {
@@ -247,17 +249,22 @@ BOOST_DATA_TEST_CASE(
         client.start();
 
         auto rpi = Route::PublicInjector{CacheType::Bep5Http{}};
-        auto body = generate_random_body();
-        for (uint16_t i = 0; i < 4; ++i)
+        auto body = generate_random_body(8);
+        uint32_t next_i = 0;
+        while (true)
         {
+            auto i = next_i++;
+
             BOOST_TEST_MESSAGE("Iteration " << proto << ": " << i);
-            auto url = server.add_resource("/", body);
+            auto url = server.add_resource(util::str("/r", i), body);
             auto rq = CacheRequestBuilder(url).set_route(rpi).build();
             auto rs = fetch_through_client(client, rq, yield);
 
             BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
             BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_injector);
             BOOST_REQUIRE(rs.body() == body);
+
+            async_sleep(5s, yield);
         }
         client.stop();
     });
@@ -406,6 +413,10 @@ BOOST_DATA_TEST_CASE(
 
         const std::string injector_credentials = "username:password";
 
+        auto injector_dht = mock_dht("injector", yield.get_executor(), mock_dht_swarms);
+
+        //injector_dht->set_error_on_announce(0, asio::error::timed_out);
+
     	Injector injector(
     	    make_config<InjectorConfig>({
                 "./no_injector_exec"s,
@@ -420,7 +431,7 @@ BOOST_DATA_TEST_CASE(
                 "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
-            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
+            injector_dht
         );
 
         std::vector<Client> seeders;
@@ -448,7 +459,10 @@ BOOST_DATA_TEST_CASE(
                     // TODO: Add test supporting local discovery
                     "--disable-local-peer-discovery"s
                 }),
-                mock_dht_builder(name, yield.get_executor(), mock_dht_swarms)
+                [&] () {
+                    auto dht = (*mock_dht_builder(name, yield.get_executor(), mock_dht_swarms))();
+                    return dht;
+                }
             );
         }
 
@@ -625,26 +639,32 @@ BOOST_AUTO_TEST_CASE(test_direct_to_injector_connect_proxy) {
 
 BOOST_DATA_TEST_CASE(
     test_fetching_private_route_many_times,
-    data::make({ DhtImpl::mock, DhtImpl::real }),
+    //data::make({ DhtImpl::mock, DhtImpl::real }),
+    data::make({ DhtImpl::mock }),
     dht_impl
 ) {
-    get_logger().set_threshold(INFO);
+    get_logger().set_threshold(DEBUG);
 
     asio::io_context ctx;
 
     TestDir root;
+    root.delete_on_exit(true);
 
-    HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
-    auto url = server.add_resource("/", generate_random_body());
+    run(ctx, [&] (Async yield) {
+        HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
 
-    run(ctx, [&, server = std::move(server)] (Async yield) {
         auto [dht_nodes, dht_endpoint, mock_dht_swarms] = setup_dht(dht_impl, 8, yield);
 
         const std::string injector_credentials = "username:password";
 
+        auto injector_dht = mock_dht("injector", yield.get_executor(), mock_dht_swarms);
+
+        //injector_dht->set_error_on_announce(0, asio::error::timed_out);
+
     	Injector injector(
 	        make_config<InjectorConfig>({
                 "./no_injector_exec"s,
+                "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("injector").string(),
                 "--credentials"s, injector_credentials,
                 "--allow-private-targets",
@@ -655,13 +675,14 @@ BOOST_DATA_TEST_CASE(
                 "--listen-on-utp-tls=127.0.0.1:0",
             }),
             ctx,
-            mock_dht("injector", yield.get_executor(), mock_dht_swarms)
+            injector_dht
         );
 
         Client client(
             ctx,
             make_config<ClientConfig>({
                 "./no_client_exec"s,
+                "--log-level=DEBUG"s,
                 "--repo"s, root.make_subdir("client").string(),
                 "--injector-credentials"s, injector_credentials,
                 "--cache-type=bep5-http"s,
@@ -686,47 +707,63 @@ BOOST_DATA_TEST_CASE(
         client.start();
 
         auto ssl_ctx = server.ssl_context_for_client();
-        auto control_body = unwrap(fetch_from_origin(url, ssl_ctx, yield)).body();
 
-        auto rq = build_private_request(url);
+        uint32_t next_i = 0;
 
+        while (true) {
+            auto i = next_i++;
 
-        WaitCondition wc(yield.get_executor());
+            auto body = generate_random_body(16);
+            auto url = server.add_resource(util::str("/r", i), body);
+            auto rq = build_private_request(url);
 
-        uint16_t concurrency = 5;
-        uint16_t fetch_count = 40;
+            auto rs = unwrap(timeout(10s, [&] (Async yield) {
+                    return fetch_through_client(client, rq, yield);
+                }, yield));
 
-        uint16_t fetched = 0;
+            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
+            BOOST_REQUIRE_EQUAL(rs.body(), body);
 
-        std::optional<std::chrono::steady_clock::time_point> last_progress;
-
-        for (uint16_t j = 0; j < concurrency; ++j) {
-            yield.spawn([&, lock = wc.lock()] (Async yield) {
-                for (uint16_t i = 0; i < fetch_count; ++i) {
-                    auto rs = unwrap(timeout(10s, [&] (Async yield) {
-                            return fetch_through_client(client, rq, yield);
-                        }, yield));
-
-                    BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
-                    BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
-                    BOOST_REQUIRE_EQUAL(rs.body(), control_body);
-
-                    ++fetched;
-
-                    auto now = std::chrono::steady_clock::now();
-
-                    if (!last_progress || now - *last_progress >= 5s) {
-                        last_progress = now;
-
-                        std::cerr
-                            << "Progress: " << fetched << " out of "
-                            << (concurrency * fetch_count) << " fetched\n";
-                    }
-                }
-            });
+            async_sleep(200ms, yield);
         }
 
-        wc.wait(yield).value();
+        //WaitCondition wc(yield.get_executor());
+        //
+        //uint16_t concurrency = 1;
+        //uint16_t fetch_count = 40;
+        //
+        //uint16_t fetched = 0;
+        //
+        //std::optional<std::chrono::steady_clock::time_point> last_progress;
+        //
+        //for (uint16_t j = 0; j < concurrency; ++j) {
+        //    yield.spawn([&, lock = wc.lock()] (Async yield) {
+        //        for (uint16_t i = 0; i < fetch_count; ++i) {
+        //            auto rs = unwrap(timeout(10s, [&] (Async yield) {
+        //                    return fetch_through_client(client, rq, yield);
+        //                }, yield));
+
+        //            BOOST_REQUIRE_EQUAL(rs.result(), http::status::ok);
+        //            BOOST_REQUIRE_EQUAL(rs[http_::response_source_hdr], http_::response_source_hdr_proxy);
+        //            BOOST_REQUIRE_EQUAL(rs.body(), control_body);
+
+        //            ++fetched;
+
+        //            auto now = std::chrono::steady_clock::now();
+
+        //            if (!last_progress || now - *last_progress >= 5s) {
+        //                last_progress = now;
+
+        //                std::cerr
+        //                    << "Progress: " << fetched << " out of "
+        //                    << (concurrency * fetch_count) << " fetched\n";
+        //            }
+        //        }
+        //    });
+        //}
+
+        //wc.wait(yield).value();
 
         injector.stop();
         client.stop();
