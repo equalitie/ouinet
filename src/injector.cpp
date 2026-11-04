@@ -888,6 +888,7 @@ void listen( InjectorConfig& config
                  , origin_pools
                  , genuuid
                  , yield.tag(util::str('C', connection_id)));
+            LOG_DEBUG("YYY: after ouinet::serve()");
         });
     }
     LOG_DEBUG("YYY: end ouinet::listen");
