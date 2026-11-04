@@ -95,17 +95,22 @@ OuiServiceServer::accept(Async yield)
     LOG_DEBUG("YYY: begin ouinet::OuiServiceServer::accept");
     LOG_DEBUG("YYY: _connection_queue size: ", _connection_queue.size());
     if (_connection_queue.empty()) {
+        LOG_DEBUG("YYY: _connection_queue is empty A");
         if (auto r = _connection_available.wait(yield); !r) {
+            LOG_DEBUG("YYY: _connection_available.wait failed");
             return std::unexpected(r.error());
         }
     }
 
     if (_connection_queue.empty()) {
+        LOG_DEBUG("YYY: _connection_queue is empty B");
         return std::unexpected(asio::error::operation_aborted);
     }
 
+    LOG_DEBUG("YYY: before moving _connection_queue.front()");
     GenericStream connection = std::move(_connection_queue.front());
     _connection_queue.pop_front();
+    LOG_DEBUG("YYY: end ouinet::OuiServiceServer::accept");
     return connection;
 }
 
