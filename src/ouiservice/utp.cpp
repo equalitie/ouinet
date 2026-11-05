@@ -28,7 +28,7 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
     using namespace std::chrono_literals;
 
     assert(_udp_multiplexer->is_open());
-    LOG_DEBUG(yield, "YYY: UtpOuiServiceServer::start_listen");
+    LOG_DEBUG(yield, "YYY: begin UtpOuiServiceServer::start_listen");
     yield.spawn(_cancel, [this] (Async yield) {
         while (true) {
             sys::error_code ec;
@@ -38,10 +38,12 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
 
             LOG_DEBUG(yield, "YYY: pre asio_utp::socket::bind");
             s.bind(*_udp_multiplexer, ec);
+            LOG_DEBUG(yield, "YYY: post asio_utp::socket::bind");
             assert(!ec);
 
             LOG_DEBUG(yield, "YYY: pre asio_utp::socket::async_accept");
             auto r = s.async_accept(yield);
+            LOG_DEBUG(yield, "YYY: post asio_utp::socket::async_accept");
 
             if (!r) {
                 LOG_ERROR(yield, " UtpOuiServiceServer: failed to accept, will retry in 5s;"
@@ -53,9 +55,14 @@ sys::error_code UtpOuiServiceServer::start_listen(Async yield)
             auto ep = util::str("uTP/", s.remote_endpoint());
             LOG_DEBUG(yield, "YYY: pre channel_send_functions::async_send ", ep);
             r = _accept_queue.async_send(sys::error_code(), {std::move(s), std::move(ep)}, yield);
-            if (!r) break;
+            LOG_DEBUG(yield, "YYY: post channel_send_functions::async_send ", ep);
+            if (!r) {
+              LOG_DEBUG(yield, "YYY: failed async_send break start_listen loop", ep);
+              break;
+            }
         }
     });
+    LOG_DEBUG(yield, "YYY: end UtpOuiServiceServer::start_listen");
 
     return sys::error_code();
 }
