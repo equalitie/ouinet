@@ -25,6 +25,7 @@ android_publish=n
 windows_sign_artifacts=n
 sign_directory=/opt/sign
 cmake_generator="Ninja"
+check_code_format=n
 env=()
 
 source $(dirname $0)/util.sh linux
@@ -108,6 +109,9 @@ while [[ "$#" -gt 0 ]]; do
         --use-makefile-generator)
             cmake_generator="Unix Makefiles"
             ;;
+        --check-code-format)
+            check_code_format=y
+            ;;
         --clean) clean=y ;;
         *) error "Unknown option $1" ;;
     esac
@@ -183,6 +187,8 @@ function build_image (
         wget unzip openjdk-21-jdk ninja-build
         # For integration tests
         python3 python3-pip python3.13-venv python-is-python3
+        # For linting and code style checks
+        clang-format-19
     )
 
     # These would be downloaded automatically during building of Android
@@ -398,6 +404,11 @@ if [ -n "$host_ouisync_dir" ]; then
 fi
 
 # ---
+
+### Check code format
+if [ "$check_code_format" = y ]; then
+  exe -w $ouinet_dir bash ./scripts/check-code-format.sh
+fi
 
 for target_os in ${target_oss[@]}; do
     ### Build
