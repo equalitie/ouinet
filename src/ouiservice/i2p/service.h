@@ -45,10 +45,12 @@ public:
     struct ConfigI2pdExe {
         fs::path i2pd_exe_path;
         fs::path datadir;
+        uint16_t sam_port = 7656;
     };
 
     struct ConfigI2pdLib {
         fs::path datadir;
+        uint16_t sam_port = 7656;
     };
 
     struct Config {

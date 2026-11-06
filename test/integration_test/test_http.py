@@ -66,13 +66,18 @@ DEFAULT_EXTERNAL_I2P_SAM_ENDPOINT = "127.0.0.1:7656"
 # TODO: Currently the `-exe` and `-lib` will attempt to start the service on the
 # default SAM port. This means that only one of the binaries can start the service
 # and the others need to connect to it using the `-ext` option.
+#
+# We stick to `-lib` only: `-ext` would make processes share a SAM endpoint
+# make several unrealitic shortcut optimizations possible, for example 
+# skiping the real DHT lookup for the other party's LeaseSet (Java
+# i2p already has this shortcut, i2pd does not yet).
 I2P_SERVICE_ARGS= [
     # Attempt to connect to an external I2P service running SAM interface on
     # the given endpoint.
-    "--enable-i2p-service-ext", DEFAULT_EXTERNAL_I2P_SAM_ENDPOINT,
+    # "--enable-i2p-service-ext", DEFAULT_EXTERNAL_I2P_SAM_ENDPOINT,
     # The binary will attempt to start the `i2pd` binary as a subprocess.
     # Ouinet must be compiled with WITH_I2PD_EXE for it to work.
-    "--enable-i2p-service-exe", path_to_i2pd_executable(),
+    # "--enable-i2p-service-exe", path_to_i2pd_executable(),
     # The binary will attempt to start `i2pd` in the same process.
     # Ouinet must be compiled with WITH_I2PD_LIB for it to work.
     "--enable-i2p-service-lib", "true",
@@ -174,7 +179,10 @@ def run_i2p_client(name, idx_key, args) -> OuinetClient:
             # TODO: move/remove
             timeout=TestFixtures.I2P_TRANSPORT_TIMEOUT,
             argv=argv,
-            benchmark_regexes=[TestFixtures.I2P_TUNNEL_READY_REGEX],
+            benchmark_regexes=[
+                TestFixtures.I2P_TUNNEL_READY_REGEX,
+                TestFixtures.I2P_SERVICE_READY_REGEX,
+            ],
         )
     )
     client.start()
@@ -244,13 +252,17 @@ def run_tcp_client(name, args) -> OuinetClient:
                 TestFixtures.TCP_CLIENT_PORT_READY_REGEX,
                 TestFixtures.TCP_CLIENT_DISCOVERY_START,
                 TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX,
+                TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED,
                 TestFixtures.FRESH_SUCCESS_REGEX,
                 TestFixtures.DHT_INITIALIZED_REGEX,
                 TestFixtures.DHT_CONTACTS_STORED_REGEX,
+                TestFixtures.RESPONSE_RECEIVED_FROM_CACHE,
                 TestFixtures.CACHE_CLIENT_PEER_FOUND,
-                TestFixtures.I2P_TUNNEL_READY_REGEX,  # for BEP3 cache test
+                TestFixtures.I2P_TUNNEL_READY_REGEX,
                 TestFixtures.I2P_SERVICE_READY_REGEX,
                 TestFixtures.BEP3_ANNOUNCER_READY_REGEX,
+                TestFixtures.BEP3_HANDSHAKE_DONE_REGEX,
+                TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX,
                 TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX,
             ],
         ),
@@ -446,6 +458,11 @@ async def cleanup():
     repofolder = TestFixtures.REPO_FOLDER_NAME
     i2pfolder = "i2p"
 
+    import os
+    if os.environ.get("OUINET_KEEP_REPOS"):
+        print("OUINET_KEEP_REPOS set, skipping cleanup of", repofolder, "and", i2pfolder)
+        return
+
     print("cleaning up the folder", repofolder)
     for folder in [repofolder, i2pfolder]:
         if exists(folder):
@@ -533,18 +550,32 @@ async def test_tcp_transport(certificate_file, http_server):
     assertEquals(response.text, content)
 
 
-async def get_cached_echo(port: int, content: str, header = {}) -> Response:
+async def get_cached_echo(
+    port: int, content: str, retry_delay: float = 5, headers={}
+) -> Response:
+    """Fetch a cached echo response with retries.
+
+    `retry_delay` is the wait between attempts.
+    `headers` — additional HTTP headers to send (e.g.
+    TestFixtures.DCACHE_I2P_ROUTE to force the BEP3/I2P transport instead of
+    the default Bep5Http path).
+
+    For BEP3-over-I2P tests we pass a longer delay of
+   `TestFixtures.I2P_TUNNEL_HEALING_PERIOD` (each request_echo blocks
+    with timeout=None until the cache fetch succeeds or fails, so a retry
+    only fires after the previous attempt has fully completed;
+    """
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
             print(f"get_cached_echo attempt {i + 1}...")
-            response = await request_echo(port, content, header)
+            response = await request_echo(port, content, headers)
             if response.status_code == 200:
                 assertEquals(response.text, content)
                 return response
             print(f"get_cached_echo: got status {response.status_code}, retrying...")
         except Exception as e:
             print(f"get_cached_echo: {e}, retrying...")
-        await asyncio.sleep(5)
+        await asyncio.sleep(retry_delay)
 
     raise AssertionError(
         f"Failed to get cached response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
@@ -552,7 +583,11 @@ async def get_cached_echo(port: int, content: str, header = {}) -> Response:
 
 
 async def get_cached_sized_content(
-    port: int, expected_body: bytes, nonce: str, header = {}
+    port: int,
+    expected_body: bytes,
+    nonce: str,
+    retry_delay: float = 5,
+    headers={},
 ) -> Response:
     """Fetch a cached sized-content response with retries, comparing bytes.
 
@@ -561,12 +596,17 @@ async def get_cached_sized_content(
     stored. `expected_body` is the payload captured on the priming call, and
     `nonce` must match the value used when priming so the URL (and therefore
     the cache key) is identical.
+
+    `retry_delay` is the wait between attempts.
+    `headers` — additional HTTP headers to send (e.g.
+    TestFixtures.DCACHE_I2P_ROUTE to force the BEP3/I2P transport instead of
+    the default Bep5Http path).
     """
     content_size = len(expected_body)
     for i in range(0, TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS):
         try:
             print(f"get_cached_sized_content attempt {i + 1}... size={content_size}")
-            response = await request_sized_content(port, content_size, nonce, header)
+            response = await request_sized_content(port, content_size, nonce, headers)
             if response.status_code == 200:
                 assertEquals(response.content, expected_body)
                 return response
@@ -575,7 +615,7 @@ async def get_cached_sized_content(
             )
         except Exception as e:
             print(f"get_cached_sized_content: {e}, retrying...")
-        await asyncio.sleep(5)
+        await asyncio.sleep(retry_delay)
 
     raise AssertionError(
         f"Failed to get cached sized response after {TestFixtures.MAX_NO_OF_TRIAL_CACHE_REQUESTS} attempts"
@@ -757,15 +797,14 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
         args=[
             "--listen-on-i2p", "true",
             *I2P_SERVICE_ARGS,
-            "--i2p-hops-per-tunnel", str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_INJECTOR_SAM_PORT),
+            "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
             "--log-level", "DEBUG",
         ]
     )  # "--disable-cache"
 
-
     # wait for the I2P service to become available
-    i2p_service_sam_endpoint = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     # wait for the injector session to be created
     injector_i2p_public_id = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)).group(1)
@@ -791,13 +830,17 @@ async def test_i2p_transport(size_of_transported_blob, http_server) -> None:
             "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
             "--injector-ep",
             "i2p:" + injector_i2p_public_id,
-            # Connect to the I2P service started by `i2pinjector`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CLIENT_SAM_PORT),
             "--i2p-hops-per-tunnel",
-            str(TestFixtures.I2P_ANON_TUNNEL_HOP_COUNT),
+            str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
         ],
     )
-    # wait for the client tunnel to connect to the injector
+    # wait for the client's own i2pd to confirm its tunnels are usable
+    # (self-connection check). Without this, I2pService may still restart
+    # i2pd under us and swap destinations mid-request, so writes land in
+    # dead tunnels and the injector never sees the request.
+    await wait_for_benchmark(client, TestFixtures.I2P_SERVICE_READY_REGEX)
     await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
 
     if size_of_transported_blob == None:
@@ -825,6 +868,7 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
         args=[
             "--listen-on-i2p", "true",
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_INJECTOR_SAM_PORT),
             "--i2p-hops-per-tunnel", str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
             "--log-level",
             "DEBUG",
@@ -836,11 +880,9 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
     print("Index key is: " + index_key)
 
     # wait for the I2P service to become available
-    i2p_service_sam_endpoint = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(i2pinjector, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     # wait for the I2P session tunnel to be created
-
     injector_i2p_public_id = (await wait_for_benchmark(i2pinjector, TestFixtures.I2P_TUNNEL_READY_REGEX)).group(1)
     assert injector_i2p_public_id
 
@@ -868,15 +910,16 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
             "--cache-private",
             "--cache-http-public-key", index_key,
             "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.I2P_CLIENT["port"]),
-            # Connect to the I2P service started by `i2pinjector`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CLIENT_SAM_PORT),
             "--injector-ep", "i2p:" + injector_i2p_public_id,
             "--i2p-hops-per-tunnel",
             str(TestFixtures.I2P_FAST_TUNNEL_HOP_COUNT),
         ],
     )
 
-    # wait for the client tunnel to connect to the injector
+    # wait for self-connection check to pass before fetching
+    await wait_for_benchmark(current_client, TestFixtures.I2P_SERVICE_READY_REGEX)
     await wait_for_benchmark(current_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
     try:
@@ -915,16 +958,28 @@ async def test_bep5_caching_of_i2p_served_content(http_server) -> None:
     # This might be wrong: if it is not served from cache it last for ever or we should
     # have a common clue and then check where it was served from.
     assert response.headers['X-Ouinet-Source'] == 'dist-cache'
+    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
 
 
 @pytest.mark.timeout(TestFixtures.BEP3_CACHE_TIMEOUT)
 @pytest.mark.asyncio
-async def test_bep3_cache_over_i2p(http_server, log):
+@pytest.mark.parametrize("content_length", [TestFixtures.RESPONSE_LENGTH, TestFixtures.MULTI_BLOCK_RESPONSE_LENGTH])
+async def test_bep3_cache_over_i2p(http_server, log, content_length):
     """
     Tests BEP3 cache over I2P: client1 fetches content via TCP injector,
     caches it and announces to BEP3 tracker over I2P. After injector is stopped,
     client2 looks up peers via the same BEP3 tracker and retrieves from cache.
+
+    Parametrized over content_length to cover both a small single-chunk payload
+    and a >64KB payload that spans multiple cache chunks.
     """
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** test_bep3_cache_over_i2p: content_length = {content_length} bytes"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
     logging.debug("Hello!")
     # TCP Injector (provides signing key, no I2P needed)
     injector = run_tcp_injector(
@@ -943,6 +998,7 @@ async def test_bep3_cache_over_i2p(http_server, log):
             "bep3-http-over-i2p", "--cache-http-public-key", str(index_key),
             "--i2p-bep3-tracker", TestFixtures.BEP3_TRACKER_ID,
             *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CACHE_CLIENT_SAM_PORTS[0]),
             "--disable-origin-access",
             "--disable-proxy-access",
             "--listen-on-tcp", "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[0]["port"]),
@@ -952,8 +1008,7 @@ async def test_bep3_cache_over_i2p(http_server, log):
         ],
     )
 
-    i2p_service_sam_endpoint = (await wait_for_benchmark(client, TestFixtures.I2P_SERVICE_READY_REGEX)).group(1)
-    assert i2p_service_sam_endpoint
+    await wait_for_benchmark(client, TestFixtures.I2P_SERVICE_READY_REGEX)
 
     await wait_for_benchmark(client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
 
@@ -961,11 +1016,30 @@ async def test_bep3_cache_over_i2p(http_server, log):
     await wait_for_benchmark(client, TestFixtures.I2P_TUNNEL_READY_REGEX)
     # Wait for BEP3 announcer to be fully ready (server tunnel + tracker)
     await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+    # Wait for the announcer's BEP3 tracker handshake probe to succeed: this
+    # is the only signal that the I2P path to the tracker is actually usable.
+    await wait_for_benchmark(client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
 
-    content = safe_random_str(TestFixtures.RESPONSE_LENGTH)
-    response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
-    assertEquals(response.status_code, 200)
-    assertEquals(response.text, content)
+    # For small content, use the echo endpoint (content in URL — inherently
+    # unique per run). For large content, use the sized-content endpoint plus
+    # a random nonce to force a unique URL per run so we don't hit stale
+    # tracker announces pointing at peers from prior runs.
+    use_sized = content_length > 4096
+    if use_sized:
+        sized_nonce = safe_random_str(16)
+        response = await request_sized_content(
+            TestFixtures.CACHE_CLIENT[0]["port"],
+            content_length,
+            sized_nonce,
+        )
+        assertEquals(response.status_code, 200)
+        expected_body = response.content
+        assertEquals(len(expected_body), content_length)
+    else:
+        content = safe_random_str(content_length)
+        response = await request_echo(TestFixtures.CACHE_CLIENT[0]["port"], content)
+        assertEquals(response.status_code, 200)
+        assertEquals(response.text, content)
 
     # Shut injector down to ensure, because why not. Note that the cache client
     # wouldn't download the resource from the injector anyway because it's
@@ -974,8 +1048,19 @@ async def test_bep3_cache_over_i2p(http_server, log):
 
     # Wait for client to cache the response
     await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_REQUEST_STORED_REGEX)
-    # Wait for client to announce it has the response
-    await wait_for_benchmark(client, TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX)
+
+    # Wait for client1 to actually announce the cached entry to the BEP3 tracker
+    # over I2P. Without this, client2 may query the tracker before client1 is
+    # registered as a peer for this infohash and get_cached_echo will spin
+    # through its retries before the i2p transport has any peers to offer.
+    await wait_for_benchmark(client, TestFixtures.BEP3_ANNOUNCE_SUCCESS_REGEX)
+
+    # Capture client1's serving b32 (the canonical address the tracker should
+    # hand to client2). The constructor of Bep3Tracker logs this line very
+    # early, so by the time the announce has succeeded it must be set.
+    client1_b32 = client._proc_protocol.bep3_serving_b32
+    assert client1_b32, "client1 did not log its serving b32 identity"
+    print(f"client1 serving b32: {client1_b32}.b32.i2p")
 
     # Client2: retrieves from BEP3 distributed cache (no injector)
     cache_client = run_tcp_client(
@@ -989,8 +1074,8 @@ async def test_bep3_cache_over_i2p(http_server, log):
             TestFixtures.BEP3_TRACKER_ID,
             "--disable-origin-access",
             "--disable-proxy-access",
-            # Connect to the I2P service started by the `client`
-            "--enable-i2p-service-ext", i2p_service_sam_endpoint,
+            *I2P_SERVICE_ARGS,
+            "--managed-i2pd-sam-port", str(TestFixtures.I2P_CACHE_CLIENT_SAM_PORTS[1]),
             "--listen-on-tcp",
             "127.0.0.1:" + str(TestFixtures.CACHE_CLIENT[1]["port"]),
             "--front-end-ep",
@@ -1003,13 +1088,65 @@ async def test_bep3_cache_over_i2p(http_server, log):
     # Wait for client2's I2P tunnel (needed to talk to BEP3 tracker)
     await wait_for_benchmark(cache_client, TestFixtures.TCP_CLIENT_PORT_READY_REGEX)
     await wait_for_benchmark(cache_client, TestFixtures.I2P_TUNNEL_READY_REGEX)
+    await wait_for_benchmark(cache_client, TestFixtures.BEP3_ANNOUNCER_READY_REGEX)
+
+    # Wait for the BEP3 tracker handshake probe to actually succeed: a local
+    # The handshake probe round-trips through the tracker
+    # and only logs success once that path actually works.
+    await wait_for_benchmark(cache_client, TestFixtures.BEP3_HANDSHAKE_DONE_REGEX)
+
+    # Register a dynamic benchmark on client2 that fires when the BEP3 parser
+    # emits a `found peer dest:` line carrying client1's exact b32. The process
+    # protocol re-reads its benchmarks dict on every line, so adding at runtime
+    # is safe. We await it after get_cached_echo, when the lookup has surely
+    # fired.
+    b32_match_regex = (
+        r"[\s\S]*BEP3 tracker: found peer dest: "
+        + re.escape(client1_b32)
+        + r"\.b32\.i2p[\s\S]*"
+    )
+    cache_client.callbacks[b32_match_regex] = False
 
 
     # Retrieve cached content
-    response = await get_cached_echo(TestFixtures.CACHE_CLIENT[1]["port"], content, TestFixtures.DCACHE_I2P_ROUTE)
+    # Force the BEP3/I2P dcache route — without this Route::choose
+    # (src/route.cpp:378) defaults to Bep5Http and the BEP3 lookup
+    # path in cache/client.cpp:513 is never taken.
+    if use_sized:
+        response = await get_cached_sized_content(
+            TestFixtures.CACHE_CLIENT[1]["port"],
+            expected_body,
+            sized_nonce,
+            retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
+            headers=TestFixtures.DCACHE_I2P_ROUTE,
+        )
+    else:
+        response = await get_cached_echo(
+            TestFixtures.CACHE_CLIENT[1]["port"],
+            content,
+            retry_delay=TestFixtures.I2P_TUNNEL_HEALING_PERIOD,
+            headers=TestFixtures.DCACHE_I2P_ROUTE,
+        )
 
-    # Make sure client2 got it from cache
-    assert response.headers['X-Ouinet-Source'] == 'dist-cache'
+    # By this point client2 has gone through one or more get_peers rounds; if
+    # the tracker is doing its job and our parser decoded it correctly, one of
+    # those `found peer dest:` lines must equal client1's b32. Stall here
+    # otherwise — a non-match means the tracker/parser path is broken even if
+    # the rest of the cache flow happens to work for unrelated reasons.
+    await wait_for_benchmark(cache_client, b32_match_regex)
+    banner = (
+        "\n" + "*" * 78
+        + f"\n*** BEP3 B32 MATCH: client2 parsed client1's b32 from tracker"
+        + f"\n*** client1.b32 = {client1_b32}.b32.i2p"
+        + "\n" + "*" * 78 + "\n"
+    )
+    print(banner)
+    logging.info(banner)
 
     # Wait for cache client to announce it has the response
     await wait_for_benchmark(cache_client, TestFixtures.I2P_ANNOUNCER_ANNOUNCED_REGEX)
+    # Make sure client1 served it and client2 got it from cache
+    await wait_for_benchmark(client, TestFixtures.CACHE_CLIENT_I2P_REQUEST_SERVED)
+    await wait_for_benchmark(cache_client, TestFixtures.RESPONSE_RECEIVED_FROM_CACHE)
+    # Make sure client2 got it from cache
+    assert response.headers['X-Ouinet-Source'] == 'dist-cache'

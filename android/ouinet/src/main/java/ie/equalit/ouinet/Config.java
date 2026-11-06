@@ -82,6 +82,7 @@ public class Config implements Parcelable {
         private boolean enableLogFile = false;
         private boolean dropSavedOpts = false;
         private List<String> requestFields = null;
+        private String ouisyncPageIndex;
 
         private boolean metricsEnableOnStart = false;
         // Parallel lists: one entry per metrics server, in the same order.
@@ -286,6 +287,10 @@ public class Config implements Parcelable {
                 this.requestFields = new ArrayList<>();
             }
             this.requestFields.add(requestField);
+            return this;
+        }
+        public ConfigBuilder setOuisyncPageIndex(String ouisyncPageIndex){
+            this.ouisyncPageIndex = ouisyncPageIndex;
             return this;
         }
         public ConfigBuilder setMetricsEnableOnStart(boolean enable) {
@@ -522,6 +527,7 @@ public class Config implements Parcelable {
                     enableLogFile,
                     dropSavedOpts,
                     requestFields,
+                    ouisyncPageIndex,
                     metricsEnableOnStart,
                     metricsServerUrls,
                     metricsServerTokens,
@@ -571,6 +577,7 @@ public class Config implements Parcelable {
     private boolean enableLogFile;
     private boolean dropSavedOpts;
     private List<String> requestFields;
+    private String ouisyncPageIndex;
     private boolean metricsEnableOnStart;
     private List<String> metricsServerUrls;
     private List<String> metricsServerTokens;
@@ -618,6 +625,7 @@ public class Config implements Parcelable {
                   boolean enableLogFile,
                   boolean dropSavedOpts,
                   List<String> requestFields,
+                  String ouisyncPageIndex,
                   boolean metricsEnableOnStart,
                   List<String> metricsServerUrls,
                   List<String> metricsServerTokens,
@@ -664,6 +672,7 @@ public class Config implements Parcelable {
         this.enableLogFile = enableLogFile;
         this.dropSavedOpts = dropSavedOpts;
         this.requestFields = (requestFields == null ? null : new ArrayList<>(requestFields));
+        this.ouisyncPageIndex = ouisyncPageIndex;
         this.metricsEnableOnStart = metricsEnableOnStart;
         this.metricsServerUrls = (metricsServerUrls == null ? null : new ArrayList<>(metricsServerUrls));
         this.metricsServerTokens = (metricsServerTokens == null ? null : new ArrayList<>(metricsServerTokens));
@@ -789,6 +798,9 @@ public class Config implements Parcelable {
     public List<String> getRequestFields() {
         return (requestFields == null ? null : new ArrayList<>(requestFields));
     }
+    public String getOuisyncPageIndex() {
+        return ouisyncPageIndex;
+    }
     public boolean getMetricsEnableOnStart() {
         return metricsEnableOnStart;
     }
@@ -869,6 +881,7 @@ public class Config implements Parcelable {
         out.writeInt(enableLogFile ? 1 : 0);
         out.writeInt(dropSavedOpts ? 1 : 0);
         out.writeStringList(requestFields);
+        out.writeString(ouisyncPageIndex);
         out.writeInt(metricsEnableOnStart ? 1 : 0);
         out.writeStringList(metricsServerUrls);
         out.writeStringList(metricsServerTokens);
@@ -937,6 +950,7 @@ public class Config implements Parcelable {
         dropSavedOpts = in.readInt() != 0;
 
         requestFields = in.createStringArrayList();
+        ouisyncPageIndex = in.readString();
 
         metricsEnableOnStart = in.readInt() != 0;
         metricsServerUrls = in.createStringArrayList();

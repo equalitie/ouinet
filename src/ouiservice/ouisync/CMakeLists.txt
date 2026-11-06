@@ -19,7 +19,7 @@ if (WITH_OUISYNC)
         FetchContent_Declare(
             ouisync
             GIT_REPOSITORY "https://github.com/equalitie/ouisync"
-            GIT_TAG        "259ee79a56a7c8f144648665faccc74a82e1409b"
+            GIT_TAG        "e2d472973efffae1e9b8b89d7d922067847191ca"
         )
 
         FetchContent_MakeAvailable(ouisync)

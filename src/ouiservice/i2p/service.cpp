@@ -235,7 +235,7 @@ struct I2pService::Inner {
         LOG_DEBUG(yield, " Starting ", conf->i2pd_exe_path);
         auto i2pd = I2pd::start_exe(
             conf->i2pd_exe_path,
-            I2pd::Config(conf->datadir),
+            I2pd::Config(conf->datadir, conf->sam_port),
             yield
         );
 
@@ -271,7 +271,7 @@ struct I2pService::Inner {
 
         LOG_DEBUG(yield, " Starting");
         auto i2pd = I2pd::start_lib(
-            I2pd::Config(conf->datadir),
+            I2pd::Config(conf->datadir, conf->sam_port),
             yield.trace()
         );
 

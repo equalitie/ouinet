@@ -31,21 +31,23 @@ static std::string percent_encode(const boost::string_view in) {
 
 static void fill_common_target(std::ostream& os, const NodeID& infohash, const I2pAddress& local_server_addr) {
     // As we only use bittorent protocol to announce and we do not use it for downloading the cached
-    // content we opportunistically re-randomize the peer_id on each announce least we leave 
+    // content we opportunistically re-randomize the peer_id on each announce least we leave
     // unnecessary tracking traces behind.
     auto peer_id = NodeID::random();
 
-    // Clients generally include a fake port=6881 parameter in the announce,
-    // for compatibility with older trackers. Trackers may ignore the port
-    // parameter, and should not require it.
     // "/a" is the announce path used by I2P trackers (zzzot/opentracker) to
-    // save on length.  The ip parameter is the base 64 of the client’s
-    // Destination.  Clients generally append “.i2p” to the Base 64 Destination
-    // for compatibility with older trackers.
+    // save on length. The ip parameter is the base 64 of the client's
+    // Destination with ".i2p" appended for compatibility with older trackers.
+    // port, uploaded, downloaded are required by opentracker-i2p — omitting
+    // any of them yields HTTP 400 Bad Request. port=6881 is a conventional
+    // placeholder; I2P trackers ignore the value.
     os << "/a"
        << "?info_hash=" << percent_encode(infohash.to_bytestring())
        << "&peer_id=" << percent_encode(peer_id.to_bytestring())
-       << "&ip=" << percent_encode(local_server_addr.as_str());
+       << "&port=6881"
+       << "&ip=" << percent_encode(local_server_addr.as_str() + ".i2p")
+       << "&uploaded=0"
+       << "&downloaded=0";
 }
 
 static std::string get_peers_target(const NodeID& infohash, const I2pAddress& local_server_addr) {
@@ -97,14 +99,26 @@ I2pTrackerClient::send_request(const std::string& target, Async yield)
     auto slot = yield.cancel_slot([&] { if (socket->is_open()) socket->close(); });
 
     auto wr = http::async_write(*socket, request, yield);
-    if (!wr) return error(Error::HttpSend{wr.error()});
+    if (!wr) {
+        LOG_DEBUG("BEP3 tracker: send_request write failed for target=\"",
+                  target, "\"; ec=", wr.error());
+        return error(Error::HttpSend{wr.error()});
+    }
 
     beast::flat_buffer buffer;
     http::response<http::string_body> res;
     auto rr = http::async_read(*socket, buffer, res, yield);
-    if (!wr) return error(Error::HttpRecv{rr.error()});
+    if (!rr) {
+        LOG_DEBUG("BEP3 tracker: send_request read failed for target=\"",
+                  target, "\"; ec=", rr.error(),
+                  " partial_body_size=", res.body().size());
+        return error(Error::HttpRecv{rr.error()});
+    }
 
     if (res.result() != http::status::ok) {
+        LOG_DEBUG("BEP3 tracker: send_request non-OK status ",
+                  static_cast<int>(res.result()),
+                  " for target=\"", target, "\"");
         return error(Error::HttpResult{res.result()});
     }
 
@@ -115,7 +129,11 @@ std::expected<void, Error::Announce>
 I2pTrackerClient::announce(NodeID infohash, Async yield)
 {
     auto r = send_request(announce_target(infohash, _session->local_addr()), yield);
-    if (!r) return std::unexpected<Error::Announce>(std::move(r.error()));
+    if (!r) {
+        LOG_DEBUG("BEP3 tracker: announce failed for infohash=", infohash,
+                  "; ec=", r.error());
+        return std::unexpected<Error::Announce>(std::move(r.error()));
+    }
     return std::expected<void, Error::Announce>();
 }
 
@@ -124,7 +142,10 @@ void I2pTrackerClient::handshake(Async yield)
     // Log our serving identity in the exact form the integration tests key on
     // (b32=<52 chars>.b32.i2p): they use it to correlate this client's b32
     // with the peers the tracker returns on another client's get_peers.
-    LOG_DEBUG("BEP3 tracker: serving identity b32=", _session->local_addr());
+    // `local_addr()` may hold a B64 pub key — explicitly convert to B32 so
+    // the log matches BEP3_SERVING_IDENTITY_REGEX. The equality is being checked
+    // in the integration test.
+    LOG_DEBUG("BEP3 tracker: serving identity b32=", _session->local_addr().to_b32());
 
     for (uint32_t i = 0;; ++i) {
         auto r = send_request(handshake_target(_session->local_addr()), yield);
@@ -142,9 +163,15 @@ I2pTrackerClient::get_peers(NodeID infohash, Async yield)
 {
     static auto error = [] (auto e) { return std::unexpected<Error::GetPeers>(std::move(e)); };
 
+    LOG_DEBUG("BEP3 tracker: get_peers requesting infohash=", infohash);
+
     auto body = send_request(get_peers_target(infohash, _session->local_addr()), yield);
 
-    if (!body) return error(std::move(body.error()));
+    if (!body) {
+        LOG_DEBUG("BEP3 tracker: get_peers request failed for infohash=", infohash,
+                  "; ec=", body.error());
+        return error(std::move(body.error()));
+    }
 
     if (body->size() == 0) {
         return {};

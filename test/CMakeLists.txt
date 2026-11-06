@@ -126,6 +126,7 @@ if(NOT ${CMAKE_GENERATOR} STREQUAL "Xcode")
 endif()
 
 add_test(TARGET test_metrics)
+add_test(TARGET test_injector)
 add_test(TARGET test_injector_resolver)
 add_test(TARGET test_dns)
 add_test(TARGET test_fetch)
