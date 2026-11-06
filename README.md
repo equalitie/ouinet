@@ -321,6 +321,9 @@ You can find additional information to control the
 [access mechanisms](https://gitlab.com/equalitie/ouinet-examples/-/blob/main/android/kotlin/README.md#test-ouinet-access-mechanisms) as well as examples of other Android applications in
 [equalitie/ouinet-examples](https://gitlab.com/equalitie/ouinet-examples).
 
+## Code formatting
+
+This repository uses `clang-format-19` with the LLVM style. Compliance with the formatting rules defined in [.clang-format](https://gitlab.com/equalitie/ouinet/-/blob/main/.clang-format) is a prerequisite to successfully complete any of the CI build jobs.
 
 ## References
 
