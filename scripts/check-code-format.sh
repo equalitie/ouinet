@@ -7,4 +7,6 @@ find . -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.cc' 
     -not -path './ios/ouinet/include/ouinet/*' \
     -not -path './src/ouiservice/i2p/i2pd/*' \
     -not -path './rust/target/*' \
+    -not -path './cmake-build*/*' \
+    -not -path './build-android-*/*' \
     -print0 | xargs -0 clang-format-19 --dry-run --Werror --verbose
