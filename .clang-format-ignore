@@ -2,3 +2,4 @@ src/ouiservice/i2p/i2pd/*
 modules/asio-utp/*
 modules/cpp-upnp/*
 ios/toolchain/*
+ios/ouinet/include/ouinet/*
