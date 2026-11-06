@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/system.hpp>
 #include <expected>
 #include <optional>
 
@@ -13,12 +14,12 @@ template <class T> struct Print {
   T val;
 };
 
-template <> struct Print<sys::error_code> {
+template <> struct Print<boost::system::error_code> {
   friend std::ostream &operator<<(std::ostream &os,
-                                  const Print<sys::error_code> &p) {
+                                  const Print<boost::system::error_code> &p) {
     return os << p.ec.message();
   }
-  sys::error_code ec;
+  boost::system::error_code ec;
 };
 } // namespace detail
 
@@ -68,7 +69,7 @@ E &unwrap(E *ptr, std::source_location loc = std::source_location::current()) {
   return *ptr;
 }
 
-void unwrap(sys::error_code ec,
+void unwrap(boost::system::error_code ec,
             std::source_location loc = std::source_location::current()) {
   if (ec) {
     BOOST_FAIL(loc.file_name()

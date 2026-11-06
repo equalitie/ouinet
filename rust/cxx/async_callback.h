@@ -8,8 +8,9 @@ namespace ouinet::metrics {
 
 using AsyncCallback = std::function<void(std::string_view /* record name */
                                          ,
-                                         asio::const_buffer /* record content */
+                                         boost::asio::const_buffer
+                                         /* record content */
                                          ,
-                                         asio::yield_context)>;
+                                         boost::asio::yield_context)>;
 
 }
