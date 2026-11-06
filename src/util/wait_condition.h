@@ -34,228 +34,205 @@ namespace ouinet {
 
 class WaitCondition {
 private:
-    struct WaitState;
+  struct WaitState;
 
 public:
-    class Lock {
-        friend struct WaitState;
-        friend class WaitCondition;
+  class Lock {
+    friend struct WaitState;
+    friend class WaitCondition;
 
-    public:
-        Lock(std::shared_ptr<WaitState> wait_state);
-        Lock(const Lock& other) {
-            *this = other;
-        }
+  public:
+    Lock(std::shared_ptr<WaitState> wait_state);
+    Lock(const Lock &other) { *this = other; }
 
-        Lock& operator=(const Lock& other) {
-            _wait_state = other._wait_state;
-            if (!_wait_state) return *this;
-            if (!other.hook.is_linked()) return *this;
-            _wait_state->locks.push_back(*this);
-            return *this;
-        }
-
-        Lock(Lock&&);
-        Lock& operator=(Lock&&);
-
-        ~Lock();
-
-        void release();
-
-    private:
-        util::intrusive::list_hook hook;
-        mutable std::shared_ptr<WaitState> _wait_state;
-    };
-
-private:
-    struct Waiter {
-        util::intrusive::list_hook hook;
-        asio::any_completion_handler<void(sys::error_code)> handler;
-
-        void complete(auto& exec, sys::error_code ec) {
-            if (!hook.is_linked()) {
-                // Already completed
-                return;
-            }
-
-            // Make sure this waiter won't be completed again before the below
-            // `post` finishes.
-            hook.unlink();
-
-            asio::post(exec, [ec, handler = std::move(handler)] () mutable {
-                handler(ec);
-            });
-        }
-    };
-
-    struct WaitState {
-        asio::any_io_executor exec;
-        util::intrusive::list<Lock, &Lock::hook> locks;
-        util::intrusive::list<Waiter, &Waiter::hook> waiters;
-
-        WaitState(auto exec) : exec(std::move(exec)) {}
-    };
-
-public:
-    WaitCondition(asio::any_io_executor);
-    WaitCondition(boost::asio::io_context&);
-    WaitCondition(const WaitCondition&) = delete;
-    WaitCondition& operator=(const WaitCondition&) = delete;
-    WaitCondition(WaitCondition&&) = default;
-    WaitCondition& operator=(WaitCondition&&) = default;
-
-    template<class CompletionToken> auto wait(CompletionToken);
-    template<class CompletionToken> auto wait(Cancel&, CompletionToken);
-
-    Lock lock();
-
-    size_t size() const {
-        if (!_wait_state) return 0;
-        return _wait_state->locks.size();
+    Lock &operator=(const Lock &other) {
+      _wait_state = other._wait_state;
+      if (!_wait_state)
+        return *this;
+      if (!other.hook.is_linked())
+        return *this;
+      _wait_state->locks.push_back(*this);
+      return *this;
     }
 
-    ~WaitCondition();
+    Lock(Lock &&);
+    Lock &operator=(Lock &&);
+
+    ~Lock();
+
+    void release();
+
+  private:
+    util::intrusive::list_hook hook;
+    mutable std::shared_ptr<WaitState> _wait_state;
+  };
 
 private:
-    template<class CompletionToken> auto do_wait(Cancel*, CompletionToken);
+  struct Waiter {
+    util::intrusive::list_hook hook;
+    asio::any_completion_handler<void(sys::error_code)> handler;
+
+    void complete(auto &exec, sys::error_code ec) {
+      if (!hook.is_linked()) {
+        // Already completed
+        return;
+      }
+
+      // Make sure this waiter won't be completed again before the below
+      // `post` finishes.
+      hook.unlink();
+
+      asio::post(exec,
+                 [ec, handler = std::move(handler)]() mutable { handler(ec); });
+    }
+  };
+
+  struct WaitState {
+    asio::any_io_executor exec;
+    util::intrusive::list<Lock, &Lock::hook> locks;
+    util::intrusive::list<Waiter, &Waiter::hook> waiters;
+
+    WaitState(auto exec) : exec(std::move(exec)) {}
+  };
+
+public:
+  WaitCondition(asio::any_io_executor);
+  WaitCondition(boost::asio::io_context &);
+  WaitCondition(const WaitCondition &) = delete;
+  WaitCondition &operator=(const WaitCondition &) = delete;
+  WaitCondition(WaitCondition &&) = default;
+  WaitCondition &operator=(WaitCondition &&) = default;
+
+  template <class CompletionToken> auto wait(CompletionToken);
+  template <class CompletionToken> auto wait(Cancel &, CompletionToken);
+
+  Lock lock();
+
+  size_t size() const {
+    if (!_wait_state)
+      return 0;
+    return _wait_state->locks.size();
+  }
+
+  ~WaitCondition();
 
 private:
-    asio::any_io_executor _exec;
-    std::shared_ptr<WaitState> _wait_state;
+  template <class CompletionToken> auto do_wait(Cancel *, CompletionToken);
+
+private:
+  asio::any_io_executor _exec;
+  std::shared_ptr<WaitState> _wait_state;
 };
 
-inline
-WaitCondition::Lock::Lock(std::shared_ptr<WaitCondition::WaitState> wait_state):
-    _wait_state(std::move(wait_state))
-{
-    _wait_state->locks.push_back(*this);
+inline WaitCondition::Lock::Lock(
+    std::shared_ptr<WaitCondition::WaitState> wait_state)
+    : _wait_state(std::move(wait_state)) {
+  _wait_state->locks.push_back(*this);
 }
 
-inline
-WaitCondition::Lock::Lock(WaitCondition::Lock&& other)
-{
-    (*this) = std::move(other);
+inline WaitCondition::Lock::Lock(WaitCondition::Lock &&other) {
+  (*this) = std::move(other);
 }
 
-inline
-WaitCondition::Lock& WaitCondition::Lock::operator=(WaitCondition::Lock&& other)
-{
-    hook.swap_nodes(other.hook);
-    _wait_state.swap(other._wait_state);
-    other.hook.unlink();
-    return *this;
+inline WaitCondition::Lock &
+WaitCondition::Lock::operator=(WaitCondition::Lock &&other) {
+  hook.swap_nodes(other.hook);
+  _wait_state.swap(other._wait_state);
+  other.hook.unlink();
+  return *this;
 }
 
-inline
-WaitCondition::Lock::~Lock()
-{
-    release();
-}
+inline WaitCondition::Lock::~Lock() { release(); }
 
-inline
-void WaitCondition::Lock::release()
-{
-    if (!_wait_state) {
-        return; // moved
-    }
+inline void WaitCondition::Lock::release() {
+  if (!_wait_state) {
+    return; // moved
+  }
 
-    if (!hook.is_linked()) {
-        return; // released
-    }
+  if (!hook.is_linked()) {
+    return; // released
+  }
 
-    hook.unlink();
+  hook.unlink();
 
-    if (_wait_state->locks.empty()) {
-        auto& waiters = _wait_state->waiters;
-        while (!waiters.empty()) {
-            waiters.front().complete(_wait_state->exec, sys::error_code());
-        }
-    }
-
-    _wait_state.reset();
-}
-
-inline
-WaitCondition::WaitCondition(asio::any_io_executor exec):
-    _exec(std::move(exec))
-{}
-
-inline
-WaitCondition::~WaitCondition() {
-    if (!_wait_state) return;
-
-    auto& waiters = _wait_state->waiters;
+  if (_wait_state->locks.empty()) {
+    auto &waiters = _wait_state->waiters;
     while (!waiters.empty()) {
-        auto& waiter = waiters.front();
-        waiter.complete(_wait_state->exec, asio::error::operation_aborted);
+      waiters.front().complete(_wait_state->exec, sys::error_code());
     }
+  }
+
+  _wait_state.reset();
 }
 
-inline
-WaitCondition::WaitCondition(boost::asio::io_context& ctx):
-    _exec(ctx.get_executor())
-{}
+inline WaitCondition::WaitCondition(asio::any_io_executor exec)
+    : _exec(std::move(exec)) {}
 
-template<class CompletionToken>
-inline
-auto WaitCondition::wait(CompletionToken token)
-{
-    // HACK: correctly support cancellation when called with `Async`.
-    if constexpr (std::is_same_v<std::decay_t<CompletionToken>, Async>) {
-        Cancel cancel(token.get_cancel());
-        return do_wait(&cancel, std::forward<CompletionToken>(token));
-    } else {
-        return do_wait(nullptr, std::forward<CompletionToken>(token));
-    }
+inline WaitCondition::~WaitCondition() {
+  if (!_wait_state)
+    return;
+
+  auto &waiters = _wait_state->waiters;
+  while (!waiters.empty()) {
+    auto &waiter = waiters.front();
+    waiter.complete(_wait_state->exec, asio::error::operation_aborted);
+  }
 }
 
-template<class CompletionToken>
-inline
-auto WaitCondition::wait(Cancel& cancel, CompletionToken token)
-{
+inline WaitCondition::WaitCondition(boost::asio::io_context &ctx)
+    : _exec(ctx.get_executor()) {}
+
+template <class CompletionToken>
+inline auto WaitCondition::wait(CompletionToken token) {
+  // HACK: correctly support cancellation when called with `Async`.
+  if constexpr (std::is_same_v<std::decay_t<CompletionToken>, Async>) {
+    Cancel cancel(token.get_cancel());
     return do_wait(&cancel, std::forward<CompletionToken>(token));
+  } else {
+    return do_wait(nullptr, std::forward<CompletionToken>(token));
+  }
 }
 
-template<class CompletionToken>
-inline
-auto WaitCondition::do_wait(Cancel* cancel, CompletionToken token)
-{
-    return boost::asio::async_initiate<CompletionToken, void(sys::error_code)
-        >([&] (auto handler) {
-            if (!_wait_state || _wait_state->locks.empty()) {
-                return handler(sys::error_code{});
-            }
+template <class CompletionToken>
+inline auto WaitCondition::wait(Cancel &cancel, CompletionToken token) {
+  return do_wait(&cancel, std::forward<CompletionToken>(token));
+}
 
-            Cancel::Connection cancel_slot;
+template <class CompletionToken>
+inline auto WaitCondition::do_wait(Cancel *cancel, CompletionToken token) {
+  return boost::asio::async_initiate<CompletionToken, void(sys::error_code)>(
+      [&](auto handler) {
+        if (!_wait_state || _wait_state->locks.empty()) {
+          return handler(sys::error_code{});
+        }
 
-            auto waiter = std::make_shared<Waiter>();
-            _wait_state->waiters.push_back(*waiter);
+        Cancel::Connection cancel_slot;
 
-            if (cancel) {
-                cancel_slot = cancel->connect([exec = _exec, waiter] {
-                    waiter->complete(exec, asio::error::operation_aborted);
-                });
-            }
+        auto waiter = std::make_shared<Waiter>();
+        _wait_state->waiters.push_back(*waiter);
 
-            waiter->handler = [
-                waiter, // Preserve waiter's lifetime until handler is executed
-                handler = std::move(handler),
-                cancel_slot = std::move(cancel_slot)
-            ] (sys::error_code ec) mutable {
-                handler(ec);
+        if (cancel) {
+          cancel_slot = cancel->connect([exec = _exec, waiter] {
+            waiter->complete(exec, asio::error::operation_aborted);
+          });
+        }
+
+        waiter->handler =
+            [waiter, // Preserve waiter's lifetime until handler is executed
+             handler = std::move(handler),
+             cancel_slot = std::move(cancel_slot)](sys::error_code ec) mutable {
+              handler(ec);
             };
-        },
-        token);
+      },
+      token);
 }
 
-inline
-WaitCondition::Lock WaitCondition::lock()
-{
-    if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_exec);
-    }
+inline WaitCondition::Lock WaitCondition::lock() {
+  if (!_wait_state) {
+    _wait_state = std::make_shared<WaitState>(_exec);
+  }
 
-    return WaitCondition::Lock(_wait_state);
+  return WaitCondition::Lock(_wait_state);
 }
 
-} // ouinet namespace
+} // namespace ouinet

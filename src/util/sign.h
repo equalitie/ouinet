@@ -2,103 +2,102 @@
 
 #include "api.h"
 
-#include <openssl/evp.h>
-#include <openssl/err.h>
 #include <boost/optional.hpp>
 #include <boost/utility/string_view.hpp>
-#include <ostream>
 #include <istream>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <ostream>
 
 namespace ouinet::sign {
 
 struct Signature {
-    static const size_t size = 64;
-    using Bytes = std::array<uint8_t, size>;
-    Bytes bytes;
+  static const size_t size = 64;
+  using Bytes = std::array<uint8_t, size>;
+  Bytes bytes;
 
-    std::string to_hex() const;
+  std::string to_hex() const;
 
-    friend std::ostream& operator<<(std::ostream& os, Signature const& sig) {
-        return os << sig.to_hex();
-    }
+  friend std::ostream &operator<<(std::ostream &os, Signature const &sig) {
+    return os << sig.to_hex();
+  }
 };
 
 class OUINET_COMMON_API PublicKey {
 public:
-    static const size_t size = 32;
-    using Bytes = std::array<uint8_t, size>;
+  static const size_t size = 32;
+  using Bytes = std::array<uint8_t, size>;
 
-    PublicKey() {}
+  PublicKey() {}
 
-    PublicKey(Bytes bytes);
+  PublicKey(Bytes bytes);
 
-    PublicKey(PublicKey const&);
-    PublicKey& operator=(PublicKey const&);
+  PublicKey(PublicKey const &);
+  PublicKey &operator=(PublicKey const &);
 
-    PublicKey(PublicKey&& other);
-    PublicKey& operator=(PublicKey&& other);
+  PublicKey(PublicKey &&other);
+  PublicKey &operator=(PublicKey &&other);
 
-    bool verify(const std::string_view& message, const Signature& sig) const;
+  bool verify(const std::string_view &message, const Signature &sig) const;
 
-    Bytes to_bytes() const;
+  Bytes to_bytes() const;
 
-    std::string to_hex() const;
+  std::string to_hex() const;
 
-    static
-    boost::optional<PublicKey> from_hex(std::string_view hex);
+  static boost::optional<PublicKey> from_hex(std::string_view hex);
 
-    friend std::ostream& operator<<(std::ostream& os, PublicKey const& pk) {
-        return os << pk.to_hex();
-    }
+  friend std::ostream &operator<<(std::ostream &os, PublicKey const &pk) {
+    return os << pk.to_hex();
+  }
 
-    ~PublicKey();
+  ~PublicKey();
 
 private:
-    EVP_PKEY* _pubkey = nullptr;
+  EVP_PKEY *_pubkey = nullptr;
 };
 
 class OUINET_COMMON_API SecretKey {
 public:
-    static const size_t size = 32;
-    using Bytes = std::array<uint8_t, size>;
+  static const size_t size = 32;
+  using Bytes = std::array<uint8_t, size>;
 
-    static SecretKey generate();
+  static SecretKey generate();
 
-    SecretKey() {}
+  SecretKey() {}
 
-    SecretKey(Bytes bytes);
+  SecretKey(Bytes bytes);
 
-    SecretKey(SecretKey const&);
-    SecretKey& operator=(SecretKey const&) = delete;
+  SecretKey(SecretKey const &);
+  SecretKey &operator=(SecretKey const &) = delete;
 
-    SecretKey(SecretKey&& other);
+  SecretKey(SecretKey &&other);
 
-    SecretKey& operator=(SecretKey&& other);
+  SecretKey &operator=(SecretKey &&other);
 
-    PublicKey public_key() const;
+  PublicKey public_key() const;
 
-    Signature sign(boost::string_view message) const;
+  Signature sign(boost::string_view message) const;
 
-    Bytes to_bytes() const;
+  Bytes to_bytes() const;
 
-    std::string to_hex() const;
+  std::string to_hex() const;
 
-    static boost::optional<SecretKey> from_hex(boost::string_view hex);
+  static boost::optional<SecretKey> from_hex(boost::string_view hex);
 
-    friend std::ostream& operator<<(std::ostream& os, SecretKey const& sk) {
-        return os << sk.to_hex();
-    }
+  friend std::ostream &operator<<(std::ostream &os, SecretKey const &sk) {
+    return os << sk.to_hex();
+  }
 
-    OUINET_COMMON_API
-    friend std::istream& operator>>(std::istream&, SecretKey&);
+  OUINET_COMMON_API
+  friend std::istream &operator>>(std::istream &, SecretKey &);
 
-    ~SecretKey();
-
-private:
-    SecretKey(EVP_PKEY* pkey) : _pkey(pkey) {}
+  ~SecretKey();
 
 private:
-    EVP_PKEY* _pkey = nullptr;
+  SecretKey(EVP_PKEY *pkey) : _pkey(pkey) {}
+
+private:
+  EVP_PKEY *_pkey = nullptr;
 };
 
-} // namespaces
+} // namespace ouinet::sign

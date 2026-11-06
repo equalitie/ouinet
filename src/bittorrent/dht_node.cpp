@@ -4,9 +4,8 @@
 namespace ouinet::bittorrent {
 
 asio_utp::udp_multiplexer DhtNode::udp_multiplexer() const {
-    assert(_multiplexer);
-    return _multiplexer->inner_udp_multiplexer();
+  assert(_multiplexer);
+  return _multiplexer->inner_udp_multiplexer();
 }
 
-
-} // namespace
+} // namespace ouinet::bittorrent

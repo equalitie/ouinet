@@ -1,15 +1,15 @@
 #define BOOST_TEST_MODULE blocker
 #include <boost/test/unit_test.hpp>
 
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/detached.hpp>
-#include <namespaces.h>
-#include <util/scheduler.h>
-#include <task.h>
 #include <defer.h>
 #include <iostream>
+#include <namespaces.h>
+#include <task.h>
+#include <util/scheduler.h>
 
 BOOST_AUTO_TEST_SUITE(ouinet_scheduler)
 
@@ -20,83 +20,82 @@ using Timer = boost::asio::steady_timer;
 using Clock = chrono::steady_clock;
 
 int millis_since(Clock::time_point start) {
-    auto end = Clock::now();
-    return duration_cast<milliseconds>(end - start).count();
+  auto end = Clock::now();
+  return duration_cast<milliseconds>(end - start).count();
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler) {
-    asio::io_context ctx;
-    auto exec = ctx.get_executor();
+  asio::io_context ctx;
+  auto exec = ctx.get_executor();
 
-    std::srand(time(0));
+  std::srand(time(0));
 
-    Scheduler scheduler(ctx, (std::rand() % 8) + 2);
+  Scheduler scheduler(ctx, (std::rand() % 8) + 2);
 
-    unsigned run_count = 0;
+  unsigned run_count = 0;
 
-    for (unsigned i = 0; i < 20; ++i) {
-        task::spawn_detached(exec, [&exec, &scheduler, &run_count](auto yield) {
-            asio::post(exec, yield);
+  for (unsigned i = 0; i < 20; ++i) {
+    task::spawn_detached(exec, [&exec, &scheduler, &run_count](auto yield) {
+      asio::post(exec, yield);
 
-            sys::error_code ec;
-            auto slot = scheduler.wait_for_slot(yield[ec]);
-            BOOST_REQUIRE(!ec);
+      sys::error_code ec;
+      auto slot = scheduler.wait_for_slot(yield[ec]);
+      BOOST_REQUIRE(!ec);
 
-            ++run_count;
-            auto on_exit = defer([&] { --run_count; });
+      ++run_count;
+      auto on_exit = defer([&] { --run_count; });
 
-            BOOST_REQUIRE(run_count <= scheduler.max_running_jobs());
+      BOOST_REQUIRE(run_count <= scheduler.max_running_jobs());
 
-            Timer timer(exec);
-            timer.expires_after(chrono::milliseconds(std::rand() % 500));
-            timer.async_wait(yield[ec]);
+      Timer timer(exec);
+      timer.expires_after(chrono::milliseconds(std::rand() % 500));
+      timer.async_wait(yield[ec]);
 
-            BOOST_REQUIRE(!ec);
-        });
-    }
+      BOOST_REQUIRE(!ec);
+    });
+  }
 
-    ctx.run();
+  ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler_cancel) {
-    asio::io_context ctx;
-    auto exec = ctx.get_executor();
+  asio::io_context ctx;
+  auto exec = ctx.get_executor();
 
-    Scheduler scheduler(exec, 0);
+  Scheduler scheduler(exec, 0);
 
-    task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
-        Cancel cancel;
-        task::spawn_detached(exec, [&exec, &cancel](auto yield) {
-            asio::post(exec, yield);
-            cancel();
-        });
-        sys::error_code ec;
-        auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
-        BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
+  task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
+    Cancel cancel;
+    task::spawn_detached(exec, [&exec, &cancel](auto yield) {
+      asio::post(exec, yield);
+      cancel();
     });
+    sys::error_code ec;
+    auto slot = scheduler.wait_for_slot(cancel, yield[ec]);
+    BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
+  });
 
-    ctx.run();
+  ctx.run();
 }
 
 BOOST_AUTO_TEST_CASE(test_scheduler_destroy_mid_run) {
-    asio::io_context ctx;
-    auto exec = ctx.get_executor();
+  asio::io_context ctx;
+  auto exec = ctx.get_executor();
 
-    auto scheduler = make_unique<Scheduler>(exec, 0);
+  auto scheduler = make_unique<Scheduler>(exec, 0);
 
+  task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
     task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
-            task::spawn_detached(exec, [&exec, &scheduler](auto yield) {
-            asio::post(exec, yield);
-            scheduler.reset();
-        });
-
-        sys::error_code ec;
-        auto slot = scheduler->wait_for_slot(yield[ec]);
-        BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
+      asio::post(exec, yield);
+      scheduler.reset();
     });
 
-    ctx.run();
+    sys::error_code ec;
+    auto slot = scheduler->wait_for_slot(yield[ec]);
+    BOOST_REQUIRE_EQUAL(ec, asio::error::operation_aborted);
+  });
+
+  ctx.run();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

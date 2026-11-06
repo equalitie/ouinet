@@ -1,7 +1,7 @@
 #pragma once
 
-#include "util/sign.h"
 #include "api.h"
+#include "util/sign.h"
 
 namespace ouinet::bep5 {
 
@@ -30,25 +30,25 @@ namespace ouinet::bep5 {
 //   - `uri/<URI>`: uTP endpoints for reaching clients keeping a cached copy of
 //     the given `URI` signed with the given `INJECTOR_KEY`.
 //
-// Please bear in mind that BitTorrent DHT IDs are not the swarm names themselves,
-// but their respective SHA1 digests.
+// Please bear in mind that BitTorrent DHT IDs are not the swarm names
+// themselves, but their respective SHA1 digests.
 
 OUINET_COMMON_API
-std::string compute_injector_swarm_name( const sign::PublicKey&
-                                       , unsigned protocol_version);
+std::string compute_injector_swarm_name(const sign::PublicKey &,
+                                        unsigned protocol_version);
 
 OUINET_COMMON_API
-std::string compute_bridge_swarm_name( const sign::PublicKey&
-                                     , unsigned protocol_version);
+std::string compute_bridge_swarm_name(const sign::PublicKey &,
+                                      unsigned protocol_version);
 
 // Reuse the resulting prefix with `compute_uri_swarm_name` below.
 OUINET_COMMON_API
-std::string compute_uri_swarm_prefix( const sign::PublicKey&
-                                    , unsigned protocol_version);
+std::string compute_uri_swarm_prefix(const sign::PublicKey &,
+                                     unsigned protocol_version);
 
 // Reuse the prefix resulting from `compute_uri_swarm_prefix` above.
 OUINET_COMMON_API
-std::string compute_uri_swarm_name( boost::string_view prefix
-                                  , boost::string_view uri);
+std::string compute_uri_swarm_name(boost::string_view prefix,
+                                   boost::string_view uri);
 
-} // namespaces
+} // namespace ouinet::bep5

@@ -5,8 +5,8 @@
 namespace ouinet {
 
 struct SessionId {
-    std::string value;
-    static SessionId random();
+  std::string value;
+  static SessionId random();
 };
 
-} // namespace
+} // namespace ouinet

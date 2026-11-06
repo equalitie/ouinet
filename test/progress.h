@@ -10,29 +10,29 @@
 namespace ouinet {
 
 struct Progress {
-    Progress(const util::AsioExecutor& ex, std::string message)
-        : _message(std::move(message))
-    {
-        task::spawn_detached(ex, [&, ex] (boost::asio::yield_context yield) {
-            Cancel cancel(_cancel);
-            const char p[] = {'|', '/', '-', '\\'};
+  Progress(const util::AsioExecutor &ex, std::string message)
+      : _message(std::move(message)) {
+    task::spawn_detached(ex, [&, ex](boost::asio::yield_context yield) {
+      Cancel cancel(_cancel);
+      const char p[] = {'|', '/', '-', '\\'};
 
-            while (!cancel) {
-                std::cerr << _message << "... " << p[_i++ % 4] << '\r';
-                async_sleep(std::chrono::milliseconds(200), cancel, yield);
-            }
-        });
-    }
+      while (!cancel) {
+        std::cerr << _message << "... " << p[_i++ % 4] << '\r';
+        async_sleep(std::chrono::milliseconds(200), cancel, yield);
+      }
+    });
+  }
 
-    ~Progress() {
-        std::cerr << _message << " done. Took " << ((float) _i/5) << " seconds\r\n";
-        _cancel();
-    }
+  ~Progress() {
+    std::cerr << _message << " done. Took " << ((float)_i / 5)
+              << " seconds\r\n";
+    _cancel();
+  }
 
 private:
-    Cancel _cancel;
-    std::string _message;
-    unsigned _i = 0;
+  Cancel _cancel;
+  std::string _message;
+  unsigned _i = 0;
 };
 
-} // namespace
+} // namespace ouinet

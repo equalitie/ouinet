@@ -13,12 +13,11 @@
 #define API
 #endif
 
-class API NativeLib
-{
+class API NativeLib {
 public:
   int getClientState();
   std::string helloOuinet();
-  void startClient(const std::vector<std::string>& args);
+  void startClient(const std::vector<std::string> &args);
   void stopClient();
   std::string getProxyEndpoint() const noexcept;
   std::string getFrontendEndpoint() const noexcept;

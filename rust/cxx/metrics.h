@@ -1,11 +1,11 @@
 #pragma once
 
-#include <string_view>
-#include <boost/filesystem.hpp>
-#include <boost/asio/ip/udp.hpp>
-#include "ouinet-rs/src/metrics/bridge.rs.h"
-#include "cxx/record_processor.h"
 #include "cxx/async_callback.h"
+#include "cxx/record_processor.h"
+#include "ouinet-rs/src/metrics/bridge.rs.h"
+#include <boost/asio/ip/udp.hpp>
+#include <boost/filesystem.hpp>
+#include <string_view>
 
 namespace ouinet::metrics {
 
@@ -18,13 +18,12 @@ class Bootstrap;
 class Request;
 class EncryptionKey;
 
-template<typename T>
-using OptBox = std::optional<rust::Box<T>>;
+template <typename T> using OptBox = std::optional<rust::Box<T>>;
 
 enum class SetAuxResult {
-    Ok = 0,
-    BadRecordId,
-    Noop,
+  Ok = 0,
+  BadRecordId,
+  Noop,
 };
 
 // Records older than this duration will be deleted.
@@ -32,113 +31,114 @@ constexpr uint64_t default_delete_after_seconds{60 * 60 * 24 * 7};
 
 class Client {
 public:
-    // Creates a metrics client which does nothing.
-    static Client noop();
+  // Creates a metrics client which does nothing.
+  static Client noop();
 
-    Client(const fs::path& repo_root_path, EncryptionKey encryption_key);
-    Client( const fs::path& repo_root_path, EncryptionKey encryption_key
-          , uint64_t delete_after_seconds);
+  Client(const fs::path &repo_root_path, EncryptionKey encryption_key);
+  Client(const fs::path &repo_root_path, EncryptionKey encryption_key,
+         uint64_t delete_after_seconds);
 
-    void enable(util::AsioExecutor executor, AsyncCallback record_processor);
-    void disable();
+  void enable(util::AsioExecutor executor, AsyncCallback record_processor);
+  void disable();
 
-    bool is_enabled() const { return _is_enabled; }
+  bool is_enabled() const { return _is_enabled; }
 
-    MainlineDht mainline_dht();
+  MainlineDht mainline_dht();
 
-    Request new_origin_request();
-    Request new_public_injector_request();
-    Request new_private_injector_request();
-    Request new_cache_in_request();
-    Request new_cache_out_request();
+  Request new_origin_request();
+  Request new_public_injector_request();
+  Request new_private_injector_request();
+  Request new_cache_in_request();
+  Request new_cache_out_request();
 
-    // Meter number of bytes transferred when this node acts as a bridge
-    // between the injector and the other client.
-    void bridge_transfer_i2c(size_t);
-    void bridge_transfer_c2i(size_t);
+  // Meter number of bytes transferred when this node acts as a bridge
+  // between the injector and the other client.
+  void bridge_transfer_i2c(size_t);
+  void bridge_transfer_c2i(size_t);
 
-    // Returns `false` if this is a `noop` client.
-    SetAuxResult set_aux_key_value(std::string_view record_id, std::string_view key, std::string_view value);
+  // Returns `false` if this is a `noop` client.
+  SetAuxResult set_aux_key_value(std::string_view record_id,
+                                 std::string_view key, std::string_view value);
 
-    std::optional<std::string> current_device_id() const;
-    std::optional<std::string> current_record_id() const;
+  std::optional<std::string> current_device_id() const;
+  std::optional<std::string> current_record_id() const;
 
 private:
-    Client() = default;
+  Client() = default;
 
-    OptBox<bridge::Client> _impl;
-    bool _is_enabled = false;
+  OptBox<bridge::Client> _impl;
+  bool _is_enabled = false;
 };
 
 // -- DHT ------------------------------------------------------------
 
 class MainlineDht {
 public:
-    DhtNode dht_node_ipv4();
-    DhtNode dht_node_ipv6();
+  DhtNode dht_node_ipv4();
+  DhtNode dht_node_ipv6();
 
 private:
-    friend class Client;
+  friend class Client;
 
-    MainlineDht(OptBox<bridge::MainlineDht> impl) : _impl(std::move(impl)) {}
+  MainlineDht(OptBox<bridge::MainlineDht> impl) : _impl(std::move(impl)) {}
 
-    OptBox<bridge::MainlineDht> _impl;
+  OptBox<bridge::MainlineDht> _impl;
 };
 
 class DhtNode {
 public:
-    Bootstrap bootstrap();
+  Bootstrap bootstrap();
 
 private:
-    friend class MainlineDht;
+  friend class MainlineDht;
 
-    DhtNode(OptBox<bridge::DhtNode> impl) : _impl(std::move(impl)) {}
+  DhtNode(OptBox<bridge::DhtNode> impl) : _impl(std::move(impl)) {}
 
-    OptBox<bridge::DhtNode> _impl;
+  OptBox<bridge::DhtNode> _impl;
 };
 
 class Bootstrap {
 public:
-    void mark_success();
+  void mark_success();
 
 private:
-    friend class DhtNode;
+  friend class DhtNode;
 
-    Bootstrap(OptBox<bridge::Bootstrap> impl) : _impl(std::move(impl)) {}
+  Bootstrap(OptBox<bridge::Bootstrap> impl) : _impl(std::move(impl)) {}
 
-    OptBox<bridge::Bootstrap> _impl;
+  OptBox<bridge::Bootstrap> _impl;
 };
 
 // -- Requests ------------------------------------------------------
 
 class Request {
 public:
-    // Mark how much data was transferred in the body of the response.  Can be
-    // called repeatedly (e.g. because the body is uses chunked encoding).
-    void increment_transfer_size(size_t);
+  // Mark how much data was transferred in the body of the response.  Can be
+  // called repeatedly (e.g. because the body is uses chunked encoding).
+  void increment_transfer_size(size_t);
 
-    void finish(boost::system::error_code ec);
+  void finish(boost::system::error_code ec);
 
 private:
-    friend class Client;
+  friend class Client;
 
-    Request(OptBox<bridge::Request> impl): _impl(std::move(impl)) {}
+  Request(OptBox<bridge::Request> impl) : _impl(std::move(impl)) {}
 
-    OptBox<bridge::Request> _impl;
+  OptBox<bridge::Request> _impl;
 };
 
 // -- Encryption key  ------------------------------------------------
 
 class EncryptionKey {
 public:
-    static std::optional<EncryptionKey> validate(const std::string& key_str);
+  static std::optional<EncryptionKey> validate(const std::string &key_str);
 
 private:
-    friend class Client;
+  friend class Client;
 
-    EncryptionKey(OptBox<bridge::EncryptionKey> impl) : _impl(std::move(impl)) {}
+  EncryptionKey(OptBox<bridge::EncryptionKey> impl) : _impl(std::move(impl)) {}
 
-    OptBox<bridge::EncryptionKey> _impl;
+  OptBox<bridge::EncryptionKey> _impl;
 };
 
-} // namespace
+} // namespace ouinet::metrics

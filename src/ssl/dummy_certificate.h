@@ -1,8 +1,8 @@
 #pragma once
 
 #include <boost/beast/core/string.hpp>
-#include <string>
 #include <openssl/x509v3.h>
+#include <string>
 
 #include "../namespaces.h"
 
@@ -12,24 +12,24 @@ class CACertificate;
 
 class DummyCertificate {
 public:
-    // If `cn` is ``example.com``, this generates a certificate for
-    // ``*.example.com`` with ``example.com`` as an alternative name.
-    DummyCertificate(CACertificate&, const std::string& cn);
+  // If `cn` is ``example.com``, this generates a certificate for
+  // ``*.example.com`` with ``example.com`` as an alternative name.
+  DummyCertificate(CACertificate &, const std::string &cn);
 
-    DummyCertificate(const DummyCertificate&) = delete;
-    DummyCertificate& operator=(const DummyCertificate&) = delete;
+  DummyCertificate(const DummyCertificate &) = delete;
+  DummyCertificate &operator=(const DummyCertificate &) = delete;
 
-    DummyCertificate(DummyCertificate&&);
-    DummyCertificate& operator=(DummyCertificate&&);
+  DummyCertificate(DummyCertificate &&);
+  DummyCertificate &operator=(DummyCertificate &&);
 
-    const std::string& pem_certificate() const { return _pem_certificate; }
+  const std::string &pem_certificate() const { return _pem_certificate; }
 
-    ~DummyCertificate();
+  ~DummyCertificate();
 
 private:
-    X509* _x;
+  X509 *_x;
 
-    std::string _pem_certificate;
+  std::string _pem_certificate;
 };
 
-} // namespace
+} // namespace ouinet
