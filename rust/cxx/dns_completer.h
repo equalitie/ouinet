@@ -6,10 +6,9 @@ namespace ouinet::dns::bridge {
 
 class Completer {
 public:
+  // Completer();
 
-    // Completer();
-
-    void complete(rust::Vec<IpAddress> addresses) const;
+  void complete(rust::Vec<IpAddress> addresses) const;
 };
 
 } // namespace ouinet::dns::bridge

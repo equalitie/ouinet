@@ -39,154 +39,124 @@ namespace ouinet {
 
 class SuccessCondition {
 private:
-    struct WaitState {
-        ConditionVariable condition;
-        int remaining_locks;
-        bool success;
+  struct WaitState {
+    ConditionVariable condition;
+    int remaining_locks;
+    bool success;
 
-        bool blocked() {
-            return remaining_locks > 0 && !success;
-        }
+    bool blocked() { return remaining_locks > 0 && !success; }
 
-        WaitState(const AsioExecutor&);
-    };
+    WaitState(const AsioExecutor &);
+  };
 
 public:
-    class Lock {
-    public:
-        Lock(const std::shared_ptr<WaitState>& wait_state);
-        Lock(const Lock&) = delete;
-        Lock& operator=(const Lock&) = delete;
-        Lock(Lock&&);
-        Lock& operator=(Lock&&);
+  class Lock {
+  public:
+    Lock(const std::shared_ptr<WaitState> &wait_state);
+    Lock(const Lock &) = delete;
+    Lock &operator=(const Lock &) = delete;
+    Lock(Lock &&);
+    Lock &operator=(Lock &&);
 
-        ~Lock();
+    ~Lock();
 
-        void release(bool success) const;
+    void release(bool success) const;
 
-    private:
-        mutable std::shared_ptr<WaitState> _wait_state;
-    };
+  private:
+    mutable std::shared_ptr<WaitState> _wait_state;
+  };
 
 public:
-    SuccessCondition(const AsioExecutor&);
-    SuccessCondition(const SuccessCondition&) = delete;
-    SuccessCondition& operator=(const SuccessCondition&) = delete;
+  SuccessCondition(const AsioExecutor &);
+  SuccessCondition(const SuccessCondition &) = delete;
+  SuccessCondition &operator=(const SuccessCondition &) = delete;
 
-    bool wait_for_success(boost::asio::yield_context yield);
-    bool wait_for_success(Async yield);
+  bool wait_for_success(boost::asio::yield_context yield);
+  bool wait_for_success(Async yield);
 
-    Lock lock();
+  Lock lock();
 
-    void cancel();
-    bool cancelled() {
-        return _cancelled;
-    }
+  void cancel();
+  bool cancelled() { return _cancelled; }
 
 private:
-    AsioExecutor _exec;
-    std::shared_ptr<WaitState> _wait_state;
-    Cancel _cancel_signal;
-    bool _cancelled;
+  AsioExecutor _exec;
+  std::shared_ptr<WaitState> _wait_state;
+  Cancel _cancel_signal;
+  bool _cancelled;
 };
 
+inline SuccessCondition::WaitState::WaitState(const AsioExecutor &exec)
+    : condition(exec), remaining_locks(0), success(false) {}
 
-
-inline
-SuccessCondition::WaitState::WaitState(const AsioExecutor& exec):
-    condition(exec),
-    remaining_locks(0),
-    success(false)
-{}
-
-inline
-SuccessCondition::Lock::Lock(const std::shared_ptr<SuccessCondition::WaitState>& wait_state):
-    _wait_state(wait_state)
-{
-    _wait_state->remaining_locks++;
+inline SuccessCondition::Lock::Lock(
+    const std::shared_ptr<SuccessCondition::WaitState> &wait_state)
+    : _wait_state(wait_state) {
+  _wait_state->remaining_locks++;
 }
 
-inline
-SuccessCondition::Lock::Lock(SuccessCondition::Lock&& other)
-{
-    (*this) = std::move(other);
+inline SuccessCondition::Lock::Lock(SuccessCondition::Lock &&other) {
+  (*this) = std::move(other);
 }
 
-inline
-SuccessCondition::Lock& SuccessCondition::Lock::operator=(SuccessCondition::Lock&& other)
-{
-    release(false);
-    _wait_state = other._wait_state;
-    other._wait_state.reset();
-    return *this;
+inline SuccessCondition::Lock &
+SuccessCondition::Lock::operator=(SuccessCondition::Lock &&other) {
+  release(false);
+  _wait_state = other._wait_state;
+  other._wait_state.reset();
+  return *this;
 }
 
-inline
-SuccessCondition::Lock::~Lock()
-{
-    release(false);
+inline SuccessCondition::Lock::~Lock() { release(false); }
+
+inline void SuccessCondition::Lock::release(bool success) const {
+  if (!_wait_state) {
+    return;
+  }
+
+  _wait_state->remaining_locks--;
+  if (success) {
+    _wait_state->success = true;
+  }
+  if (!_wait_state->blocked()) {
+    _wait_state->condition.notify();
+  }
+  _wait_state.reset();
 }
 
-inline
-void SuccessCondition::Lock::release(bool success) const
-{
-    if (!_wait_state) {
-        return;
-    }
+inline SuccessCondition::SuccessCondition(const AsioExecutor &exec)
+    : _exec(exec), _cancelled(false) {}
 
-    _wait_state->remaining_locks--;
-    if (success) {
-        _wait_state->success = true;
-    }
-    if (!_wait_state->blocked()) {
-        _wait_state->condition.notify();
-    }
-    _wait_state.reset();
+inline bool
+SuccessCondition::wait_for_success(boost::asio::yield_context yield) {
+  if (!_wait_state) {
+    _wait_state = std::make_shared<WaitState>(_exec);
+  }
+
+  std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
+  if (wait_state->blocked()) {
+    auto cancel_slot = _cancel_signal.connect(
+        [&wait_state] { wait_state->condition.notify(); });
+    wait_state->condition.wait(yield);
+  }
+  return wait_state->success;
 }
 
-inline
-SuccessCondition::SuccessCondition(const AsioExecutor& exec):
-    _exec(exec),
-    _cancelled(false)
-{}
-
-inline
-bool SuccessCondition::wait_for_success(boost::asio::yield_context yield)
-{
-    if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_exec);
-    }
-
-    std::shared_ptr<WaitState> wait_state = std::move(_wait_state);
-    if (wait_state->blocked()) {
-        auto cancel_slot = _cancel_signal.connect([&wait_state] {
-            wait_state->condition.notify();
-        });
-        wait_state->condition.wait(yield);
-    }
-    return wait_state->success;
+inline bool SuccessCondition::wait_for_success(Async yield) {
+  return wait_for_success(yield.asio_yield());
 }
 
-inline
-bool SuccessCondition::wait_for_success(Async yield) {
-    return wait_for_success(yield.asio_yield());
+inline SuccessCondition::Lock SuccessCondition::lock() {
+  if (!_wait_state) {
+    _wait_state = std::make_shared<WaitState>(_exec);
+  }
+
+  return SuccessCondition::Lock(_wait_state);
 }
 
-inline
-SuccessCondition::Lock SuccessCondition::lock()
-{
-    if (!_wait_state) {
-        _wait_state = std::make_shared<WaitState>(_exec);
-    }
-
-    return SuccessCondition::Lock(_wait_state);
+inline void SuccessCondition::cancel() {
+  _cancelled = true;
+  _cancel_signal();
 }
 
-inline
-void SuccessCondition::cancel()
-{
-    _cancelled = true;
-    _cancel_signal();
-}
-
-} // ouinet namespace
+} // namespace ouinet

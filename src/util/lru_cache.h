@@ -1,131 +1,119 @@
 #pragma once
 
-#include <unordered_map>
-#include <list>
 #include <cstddef>
+#include <list>
 #include <stdexcept>
+#include <unordered_map>
 
-namespace ouinet { namespace util {
+namespace ouinet {
+namespace util {
 
-template<typename Key, typename Value>
-class LruCache {
+template <typename Key, typename Value> class LruCache {
 private:
-    using KeyVal = std::pair<Key, Value>;
-    using ListIter = typename std::list<KeyVal>::iterator;
-    using Map = std::unordered_map<Key, ListIter>;
-    using MapIter = typename Map::const_iterator;
-
+  using KeyVal = std::pair<Key, Value>;
+  using ListIter = typename std::list<KeyVal>::iterator;
+  using Map = std::unordered_map<Key, ListIter>;
+  using MapIter = typename Map::const_iterator;
 
 public:
-    class const_iterator {
-        friend class LruCache;
-        MapIter i;
-    public:
-        const_iterator(MapIter i) : i(i) {}
-        const KeyVal& operator*() const { return *i->second; }
-        const KeyVal* operator->() const { return &*i->second; }
+  class const_iterator {
+    friend class LruCache;
+    MapIter i;
 
-        const_iterator& operator++() {
-            ++i;
-            return *this;
-        }
+  public:
+    const_iterator(MapIter i) : i(i) {}
+    const KeyVal &operator*() const { return *i->second; }
+    const KeyVal *operator->() const { return &*i->second; }
 
-        const_iterator operator++(int) {
-            const_iterator ret{i};
-            ++i;
-            return ret;
-        }
+    const_iterator &operator++() {
+      ++i;
+      return *this;
+    }
 
-        bool operator==(const_iterator j) const {
-            return i == j.i;
-        }
+    const_iterator operator++(int) {
+      const_iterator ret{i};
+      ++i;
+      return ret;
+    }
 
-        bool operator!=(const_iterator j) const {
-            return i != j.i;
-        }
-    };
+    bool operator==(const_iterator j) const { return i == j.i; }
+
+    bool operator!=(const_iterator j) const { return i != j.i; }
+  };
 
 public:
-    LruCache(size_t max_size)
-        : _max_size(max_size) { }
+  LruCache(size_t max_size) : _max_size(max_size) {}
 
-    Value* put(const Key& key, Value value) {
-        // When modifying this func be careful to handle the case
-        // when `key` is a reference to the key already in the cache.
-        // E.g. cache.put(i->key, "new value");
+  Value *put(const Key &key, Value value) {
+    // When modifying this func be careful to handle the case
+    // when `key` is a reference to the key already in the cache.
+    // E.g. cache.put(i->key, "new value");
 
-        auto it = _map.find(key);
+    auto it = _map.find(key);
 
-        _list.push_front(KeyVal(key, std::move(value)));
+    _list.push_front(KeyVal(key, std::move(value)));
 
-        if (it != _map.end()) {
-            _list.erase(it->second);
-            it->second = _list.begin();
-        }
-        else {
-            _map[key] = _list.begin();
-        }
-
-        if (_map.size() > _max_size) {
-            auto last = _list.end();
-            last--;
-            _map.erase(last->first);
-            _list.pop_back();
-        }
-
-        return &_list.begin()->second;
+    if (it != _map.end()) {
+      _list.erase(it->second);
+      it->second = _list.begin();
+    } else {
+      _map[key] = _list.begin();
     }
 
-    Value* get(const Key& key) {
-        auto it = _map.find(key);
-
-        if (it == _map.end()) return nullptr;
-
-        _list.splice(_list.begin(), _list, it->second);
-
-        assert(it->second == _list.begin());
-
-        return &it->second->second;
+    if (_map.size() > _max_size) {
+      auto last = _list.end();
+      last--;
+      _map.erase(last->first);
+      _list.pop_back();
     }
 
-    bool exists(const Key& key) const {
-        return _map.count(key) != 0;
-    }
+    return &_list.begin()->second;
+  }
 
-    size_t size() const {
-        return _map.size();
-    }
+  Value *get(const Key &key) {
+    auto it = _map.find(key);
 
-    bool empty() const { return _map.empty(); }
+    if (it == _map.end())
+      return nullptr;
 
-    // TODO: Currently the returned iterator is not
-    // ordered by usage.
-    const_iterator begin() const {
-        return const_iterator{_map.begin()};
-    }
+    _list.splice(_list.begin(), _list, it->second);
 
-    // TODO: Currently the returned iterator is not
-    // ordered by usage.
-    const_iterator end() const {
-        return const_iterator{_map.end()};
-    }
+    assert(it->second == _list.begin());
 
-    const_iterator erase(const_iterator i) {
-        auto j = i;
-        ++j;
-        _list.erase(i.i->second);
-        _map.erase(i.i);
-        return j;
-    }
+    return &it->second->second;
+  }
 
-    void move_to_front(const_iterator i) {
-        _list.splice(_list.begin(), _list, i.i->second);
-    }
+  bool exists(const Key &key) const { return _map.count(key) != 0; }
+
+  size_t size() const { return _map.size(); }
+
+  bool empty() const { return _map.empty(); }
+
+  // TODO: Currently the returned iterator is not
+  // ordered by usage.
+  const_iterator begin() const { return const_iterator{_map.begin()}; }
+
+  // TODO: Currently the returned iterator is not
+  // ordered by usage.
+  const_iterator end() const { return const_iterator{_map.end()}; }
+
+  const_iterator erase(const_iterator i) {
+    auto j = i;
+    ++j;
+    _list.erase(i.i->second);
+    _map.erase(i.i);
+    return j;
+  }
+
+  void move_to_front(const_iterator i) {
+    _list.splice(_list.begin(), _list, i.i->second);
+  }
 
 private:
-    std::list<KeyVal> _list;
-    std::unordered_map<Key, ListIter> _map;
-    size_t _max_size;
+  std::list<KeyVal> _list;
+  std::unordered_map<Key, ListIter> _map;
+  size_t _max_size;
 };
 
-}} // namespaces
+} // namespace util
+} // namespace ouinet

@@ -2,12 +2,13 @@
 
 #include <string>
 
-namespace ouinet::test::constants
-{
-    namespace sandbox {
-        const std::string injector_credentials = "ouinet:160d79874a52c2cbcdec58db1a8160a9";
-        const std::string cache_http_public_key = "mhwc7k2qui4d3jbrqdbtrahh23auezoiz5sgkg35qmb3j6mvvn2q";
-        const std::string tls_injector_cert = R"(-----BEGIN CERTIFICATE-----
+namespace ouinet::test::constants {
+namespace sandbox {
+const std::string injector_credentials =
+    "ouinet:160d79874a52c2cbcdec58db1a8160a9";
+const std::string cache_http_public_key =
+    "mhwc7k2qui4d3jbrqdbtrahh23auezoiz5sgkg35qmb3j6mvvn2q";
+const std::string tls_injector_cert = R"(-----BEGIN CERTIFICATE-----
 MIICyTCCAbGgAwIBAgIGAYx2FNUwMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
 CWxvY2FsaG9zdDAeFw0yMzEyMTUwNDQyMDZaFw0zODEyMTMwNDQyMDZaMBQxEjAQ
 BgNVBAMMCWxvY2FsaG9zdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
@@ -25,6 +26,5 @@ YxDYK/Tr32Ycnr64iP0saC6CeoCFlnaAnBhnsT049jghxJXXmI7q19etF/8PaSuZ
 oGzNKNQkAHmkxCl91VCALrRS1f2a1x6GN1HInSrJc+gOdFiP6dafGSzg7YcL
 -----END CERTIFICATE-----
 )";
-    }
-}
-
+} // namespace sandbox
+} // namespace ouinet::test::constants

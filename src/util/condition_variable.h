@@ -1,137 +1,123 @@
 #pragma once
 
-#include <boost/asio/spawn.hpp>
-#include <boost/asio/error.hpp>
-#include <boost/asio/post.hpp>
-#include <boost/intrusive/list.hpp>
 #include "cancel.h"
 #include "executor.h"
 #include "unique_function.h"
 #include "util/async.h"
+#include <boost/asio/error.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/intrusive/list.hpp>
 
 namespace ouinet {
 
 using ouinet::util::AsioExecutor;
 
 class ConditionVariable {
-    using Sig = void(boost::system::error_code);
+  using Sig = void(boost::system::error_code);
 
-    using IntrusiveHook = boost::intrusive::list_base_hook
-        <boost::intrusive::link_mode
-            <boost::intrusive::auto_unlink>>;
+  using IntrusiveHook = boost::intrusive::list_base_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
 
-    struct WaitEntry : IntrusiveHook {
-        bool canceled = false;
-        util::unique_function<Sig> handler;
+  struct WaitEntry : IntrusiveHook {
+    bool canceled = false;
+    util::unique_function<Sig> handler;
 
-        void operator()(const sys::error_code& ec) {
-            // Move to prevent destruction during execution.
-            auto h = std::move(handler);
-            if (canceled) h(asio::error::operation_aborted);
-            else h(ec);
-        }
-    };
+    void operator()(const sys::error_code &ec) {
+      // Move to prevent destruction during execution.
+      auto h = std::move(handler);
+      if (canceled)
+        h(asio::error::operation_aborted);
+      else
+        h(ec);
+    }
+  };
 
-    using IntrusiveList = boost::intrusive::list
-        <WaitEntry, boost::intrusive::constant_time_size<false>>;
+  using IntrusiveList =
+      boost::intrusive::list<WaitEntry,
+                             boost::intrusive::constant_time_size<false>>;
 
 public:
-    ConditionVariable(const AsioExecutor&);
+  ConditionVariable(const AsioExecutor &);
 
-    ConditionVariable(const ConditionVariable&) = delete;
-    ConditionVariable& operator=(const ConditionVariable&) = delete;
+  ConditionVariable(const ConditionVariable &) = delete;
+  ConditionVariable &operator=(const ConditionVariable &) = delete;
 
-    ~ConditionVariable();
+  ~ConditionVariable();
 
-    AsioExecutor get_executor() { return _exec; }
+  AsioExecutor get_executor() { return _exec; }
 
-    void notify(const boost::system::error_code& ec
-                    = boost::system::error_code());
+  void
+  notify(const boost::system::error_code &ec = boost::system::error_code());
 
-    template<class Token> auto wait(Cancel, Token);
-    void wait(boost::asio::yield_context yield);
-    std::expected<void, sys::error_code> wait(Async yield);
+  template <class Token> auto wait(Cancel, Token);
+  void wait(boost::asio::yield_context yield);
+  std::expected<void, sys::error_code> wait(Async yield);
 
 private:
-    AsioExecutor _exec;
-    IntrusiveList _on_notify;
+  AsioExecutor _exec;
+  IntrusiveList _on_notify;
 };
 
-inline
-ConditionVariable::ConditionVariable(const AsioExecutor& exec)
-    : _exec(exec)
-{
+inline ConditionVariable::ConditionVariable(const AsioExecutor &exec)
+    : _exec(exec) {}
+
+inline ConditionVariable::~ConditionVariable() {
+  notify(boost::asio::error::operation_aborted);
 }
 
-inline
-ConditionVariable::~ConditionVariable()
-{
-    notify(boost::asio::error::operation_aborted);
+inline void ConditionVariable::notify(const boost::system::error_code &ec) {
+  while (!_on_notify.empty()) {
+    auto &e = _on_notify.front();
+    asio::post(_exec, [&e, ec]() mutable { e(ec); });
+    _on_notify.pop_front();
+  }
 }
 
-inline
-void ConditionVariable::notify(const boost::system::error_code& ec)
-{
-    while (!_on_notify.empty()) {
-        auto& e = _on_notify.front();
-        asio::post(_exec, [&e, ec] () mutable { e(ec); });
-        _on_notify.pop_front();
+template <class Token>
+inline auto ConditionVariable::wait(Cancel cancel, Token token) {
+  auto work = asio::make_work_guard(_exec);
+
+  WaitEntry entry;
+
+  auto init = [&entry, this](auto completion_handler) {
+    entry.handler = std::move(completion_handler);
+    _on_notify.push_back(entry);
+  };
+
+  auto slot = cancel.connect([&] {
+    entry.canceled = true;
+
+    if (!entry.is_linked()) {
+      // Being here means that notify has been already called on this
+      // entry, that means that the job to execute it has been posted
+      // to the io context, but hasn't been executed yet. We set the
+      // flag above to mark it as cancelled, so once it does execute
+      // it will be done so with operation_aborted.
+
+      // Check the handler indeed hasn't been executed yet.
+      assert(entry.handler);
+      return;
     }
+
+    entry.unlink();
+
+    asio::post(_exec,
+               [&entry]() mutable { entry(asio::error::operation_aborted); });
+  });
+
+  return boost::asio::async_initiate<Token, void(boost::system::error_code)>(
+      std::move(init), token);
 }
 
-template<class Token>
-inline
-auto ConditionVariable::wait(Cancel cancel, Token token)
-{
-    auto work = asio::make_work_guard(_exec);
-
-    WaitEntry entry;
-
-    auto init = [&entry, this](auto completion_handler)
-    {
-        entry.handler = std::move(completion_handler);
-        _on_notify.push_back(entry);
-    };
-
-    auto slot = cancel.connect([&] {
-        entry.canceled = true;
-
-        if (!entry.is_linked()) {
-            // Being here means that notify has been already called on this
-            // entry, that means that the job to execute it has been posted
-            // to the io context, but hasn't been executed yet. We set the
-            // flag above to mark it as cancelled, so once it does execute
-            // it will be done so with operation_aborted.
-
-            // Check the handler indeed hasn't been executed yet.
-            assert(entry.handler);
-            return;
-        }
-
-        entry.unlink();
-
-        asio::post(_exec, [&entry] () mutable {
-            entry(asio::error::operation_aborted);
-        });
-    });
-
-    return boost::asio::async_initiate<
-        Token,
-        void(boost::system::error_code)
-      >(std::move(init), token);
+inline void ConditionVariable::wait(boost::asio::yield_context yield) {
+  Cancel dummy_cancel;
+  wait(dummy_cancel, yield);
 }
 
-inline
-void ConditionVariable::wait(boost::asio::yield_context yield)
-{
-    Cancel dummy_cancel;
-    wait(dummy_cancel, yield);
+inline std::expected<void, sys::error_code>
+ConditionVariable::wait(Async yield) {
+  return wait(yield.get_cancel(), yield);
 }
 
-inline
-std::expected<void, sys::error_code> ConditionVariable::wait(Async yield)
-{
-    return wait(yield.get_cancel(), yield);
-}
-
-} // ouinet namespace
+} // namespace ouinet

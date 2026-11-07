@@ -2,25 +2,22 @@
 
 #include "routing_table.h" // For NodeContact
 
-namespace ouinet { namespace bittorrent {
+namespace ouinet {
+namespace bittorrent {
 
 struct Contact {
-    asio::ip::udp::endpoint endpoint;
-    boost::optional<NodeID> id;
+  asio::ip::udp::endpoint endpoint;
+  boost::optional<NodeID> id;
 
-    Contact() {}
+  Contact() {}
 
-    Contact(asio::ip::udp::endpoint ep, boost::optional<NodeID> id)
-        : endpoint(ep)
-        , id(id)
-    {}
+  Contact(asio::ip::udp::endpoint ep, boost::optional<NodeID> id)
+      : endpoint(ep), id(id) {}
 
-    Contact(const NodeContact& c)
-        : endpoint(c.endpoint)
-        , id(c.id)
-    {}
+  Contact(const NodeContact &c) : endpoint(c.endpoint), id(c.id) {}
 };
 
-std::ostream& operator<<(std::ostream&, const Contact&);
+std::ostream &operator<<(std::ostream &, const Contact &);
 
-}} // namespaces
+} // namespace bittorrent
+} // namespace ouinet
