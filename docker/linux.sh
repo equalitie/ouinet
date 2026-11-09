@@ -16,6 +16,7 @@ artifacts_extra=()
 with_ouisync=n
 host_ouisync_dir=
 with_asan=n
+with_i2pd=n
 container_name=
 image_name=
 container_duration=1d
@@ -72,6 +73,9 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --with-asan)
             with_asan=y
+            ;;
+        --with-i2pd)
+            with_i2pd=y
             ;;
         --artifact-dir)
             artifact_dir=$2; shift;
@@ -453,6 +457,7 @@ for target_os in ${target_oss[@]}; do
         env+=(
           ABI="$android_abi"
           WITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
+          WITH_I2PD=$([ "$with_i2pd" == y ] && echo ON || echo OFF)
         )
 
         if [ -n "$container_ouisync_dir" ]; then

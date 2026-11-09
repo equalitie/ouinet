@@ -11,7 +11,6 @@ get_filename_component(RUNTIME_DIR_3 ${RUNTIME_DIR_2} DIRECTORY)
 get_filename_component(RUNTIME_DIR_4 ${RUNTIME_DIR_3} DIRECTORY)
 get_filename_component(RUNTIME_DIR_VARIANT ${RUNTIME_DIR_2} NAME)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_DIR_4}/library_assets/${RUNTIME_DIR_VARIANT}/out")
-set(WITH_I2PD ON)
 
 # TODO: This is to silent warnings from using unqualified std::move and std::forward.
 # The internet says we should used qualified ones so we should probably start doing that.
@@ -19,13 +18,6 @@ add_compile_options(-Wno-unqualified-std-cast-call)
 
 add_subdirectory(../.. libouinet)
 add_library(native-lib SHARED src/main/cpp/native-lib.cpp )
-
-target_link_options(i2pd PRIVATE
-  "-Wl,--enable-new-dtags"
-  "-Wl,-rpath,\$ORIGIN"
-)
-set_target_properties(i2pd PROPERTIES
-   SKIP_BUILD_RPATH OFF)
 
 target_link_libraries(native-lib
     PRIVATE
@@ -41,15 +33,21 @@ add_custom_command(
     OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so
     COMMAND ${CMAKE_COMMAND} -E copy ${LIBCPP_SHARED_PATH} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
 )
-
-add_custom_command(
-    OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:i2pd> ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
-)
 add_custom_target(libcpp_shared ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so)
-add_custom_target(i2pd_exec ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so)
-
 add_dependencies(native-lib libcpp_shared)
-add_dependencies(native-lib i2pd)
-add_dependencies(native-lib i2pd_exec)
 
+if (WITH_I2PD)
+    target_link_options(i2pd PRIVATE
+        "-Wl,--enable-new-dtags"
+        "-Wl,-rpath,\$ORIGIN"
+    )
+    set_target_properties(i2pd PROPERTIES
+    SKIP_BUILD_RPATH OFF)
+    add_custom_command(
+        OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:i2pd> ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
+    )
+    add_custom_target(i2pd_exec ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so)
+    add_dependencies(native-lib i2pd)
+    add_dependencies(native-lib i2pd_exec)
+endif()
