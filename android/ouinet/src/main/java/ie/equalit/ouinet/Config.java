@@ -58,7 +58,6 @@ public class Config implements Parcelable {
         private String i2pBep3Tracker;
         private String enableI2pServiceExe;
         private String enableI2pServiceExt;
-        private boolean enableI2pServiceLib = false;
         private String injectorEp;
         private String listenOnTcp;
         private String frontEndEp;
@@ -172,10 +171,6 @@ public class Config implements Parcelable {
         }
         public ConfigBuilder setEnableI2pServiceExt(String enableI2pServiceExt){
             this.enableI2pServiceExt = enableI2pServiceExt;
-            return this;
-        }
-        public ConfigBuilder setEnableI2pServiceLib(boolean enableI2pServiceLib){
-            this.enableI2pServiceLib = enableI2pServiceLib;
             return this;
         }
         public ConfigBuilder setInjectorEp(String injectorEp){
@@ -503,7 +498,6 @@ public class Config implements Parcelable {
                     i2pBep3Tracker,
                     enableI2pServiceExe,
                     enableI2pServiceExt,
-                    enableI2pServiceLib,
                     injectorEp,
                     listenOnTcp,
                     frontEndEp,
@@ -553,7 +547,6 @@ public class Config implements Parcelable {
     private String i2pBep3Tracker;
     private String enableI2pServiceExe;
     private String enableI2pServiceExt;
-    private boolean enableI2pServiceLib;
     private String injectorEp;
     private String listenOnTcp;
     private String frontEndEp;
@@ -601,7 +594,6 @@ public class Config implements Parcelable {
                   String i2pBep3Tracker,
                   String enableI2pServiceExe,
                   String enableI2pServiceExt,
-                  boolean enableI2pServiceLib,
                   String injectorEp,
                   String listenOnTcp,
                   String frontEndEp,
@@ -648,7 +640,6 @@ public class Config implements Parcelable {
         this.i2pBep3Tracker = i2pBep3Tracker;
         this.enableI2pServiceExe = enableI2pServiceExe;
         this.enableI2pServiceExt = enableI2pServiceExt;
-        this.enableI2pServiceLib = enableI2pServiceLib;
         this.injectorEp = injectorEp;
         this.listenOnTcp = listenOnTcp;
         this.frontEndEp = frontEndEp;
@@ -725,9 +716,6 @@ public class Config implements Parcelable {
     }
     public String getEnableI2pServiceExt() {
         return enableI2pServiceExt;
-    }
-    public boolean getEnableI2pServiceLib() {
-        return enableI2pServiceLib;
     }
     public String getInjectorEp() {
         return injectorEp;
@@ -856,7 +844,6 @@ public class Config implements Parcelable {
         out.writeString(i2pBep3Tracker);
         out.writeString(enableI2pServiceExe);
         out.writeString(enableI2pServiceExt);
-        out.writeInt(enableI2pServiceLib ? 1 : 0);
         out.writeString(injectorEp);
         out.writeString(listenOnTcp);
         out.writeString(frontEndEp);
@@ -914,7 +901,6 @@ public class Config implements Parcelable {
         i2pBep3Tracker = in.readString();
         enableI2pServiceExe = in.readString();
         enableI2pServiceExt = in.readString();
-        enableI2pServiceLib = in.readInt() != 0;
         injectorEp = in.readString();
         listenOnTcp= in.readString();
         frontEndEp = in.readString();
