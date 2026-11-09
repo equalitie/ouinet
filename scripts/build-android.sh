@@ -8,10 +8,6 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
-# We will use a custom ANDROID_HOME instead
-# Having them both produces an error
-unset ANDROID_SDK_ROOT
-
 # These envs need to be the same as jvm options in gradle.properties
 # Otherwise the process will need to be forked after spawning
 # to get a JVM with different options enabled
@@ -68,7 +64,10 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
 PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
+# Only set ANDROID_HOME, having ANDROID_SDK_ROOT also set can produce a build error
+unset ANDROID_SDK_ROOT
 ANDROID_HOME=${ANDROID_HOME:-"$DIR/sdk"}
+export ANDROID_HOME
 
 cat <<EOF
 Configuration environment variables:
@@ -79,7 +78,7 @@ ANDROID_HOME="$ANDROID_HOME"
 EOF
 
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
-export ANDROID_HOME OUINET_MIN_API OUINET_TARGET_API
+export OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
