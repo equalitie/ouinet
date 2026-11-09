@@ -25,11 +25,7 @@ public class Ouinet {
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
         System.loadLibrary("asio_utp");
-        System.loadLibrary("cpp_ouisync_client");
-        System.loadLibrary("cpp_ouisync_common");
-        System.loadLibrary("cpp_ouisync_service");
         System.loadLibrary("c++_shared");
-        System.loadLibrary("execi2pd");
         System.loadLibrary("native-lib");
         System.loadLibrary("ouinet_asio");
         System.loadLibrary("ouinet_client");
