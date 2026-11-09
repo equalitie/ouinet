@@ -36,11 +36,6 @@ android {
           }
         }
     }
-    // packaging{
-    //     jniLibs{
-    //         pickFirsts += "**/i2pd" 
-    //     }
-    // }
     buildFeatures {
         buildConfig true
     }
