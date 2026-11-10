@@ -2,69 +2,70 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
-#include "../src/util/wait_condition.h"
-#include "../src/util/async.h"
 #include "../src/namespaces.h"
 #include "../src/task.h"
+#include "../src/util/async.h"
+#include "../src/util/wait_condition.h"
 #include "util/unwrap.h"
 
-namespace ouinet { namespace util {
+namespace ouinet {
+namespace util {
 
-inline
-std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(asio::yield_context yield)
-{
-    auto ex = yield.get_executor();
+inline std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
+connected_pair(asio::yield_context yield) {
+  auto ex = yield.get_executor();
 
-    using namespace std;
-    using tcp = asio::ip::tcp;
-    using Ret = pair<tcp::socket, tcp::socket>;
+  using namespace std;
+  using tcp = asio::ip::tcp;
+  using Ret = pair<tcp::socket, tcp::socket>;
 
-    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor a(ex, loopback_ep);
-    tcp::socket s1(ex), s2(ex);
+  auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+  tcp::acceptor a(ex, loopback_ep);
+  tcp::socket s1(ex), s2(ex);
 
-    sys::error_code accept_ec;
-    sys::error_code connect_ec;
+  sys::error_code accept_ec;
+  sys::error_code connect_ec;
 
-    WaitCondition wc(ex);
+  WaitCondition wc(ex);
 
-    task::spawn_detached(ex, [&, lock = wc.lock()] (asio::yield_context yield) mutable {
-            a.async_accept(s2, yield[accept_ec]);
-        });
+  task::spawn_detached(
+      ex, [&, lock = wc.lock()](asio::yield_context yield) mutable {
+        a.async_accept(s2, yield[accept_ec]);
+      });
 
-    s1.async_connect(a.local_endpoint(), yield[connect_ec]);
-    wc.wait(yield);
+  s1.async_connect(a.local_endpoint(), yield[connect_ec]);
+  wc.wait(yield);
 
-    if (accept_ec)  return or_throw(yield, accept_ec, Ret(std::move(s1),std::move(s2)));
-    if (connect_ec) return or_throw(yield, connect_ec, Ret(std::move(s1),std::move(s2)));
+  if (accept_ec)
+    return or_throw(yield, accept_ec, Ret(std::move(s1), std::move(s2)));
+  if (connect_ec)
+    return or_throw(yield, connect_ec, Ret(std::move(s1), std::move(s2)));
 
-    return make_pair(std::move(s1), std::move(s2));
+  return make_pair(std::move(s1), std::move(s2));
 }
 
-inline
-std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
-connected_pair(Async yield)
-{
-    auto ex = yield.get_executor();
+inline std::pair<asio::ip::tcp::socket, asio::ip::tcp::socket>
+connected_pair(Async yield) {
+  auto ex = yield.get_executor();
 
-    using namespace std;
-    using tcp = asio::ip::tcp;
+  using namespace std;
+  using tcp = asio::ip::tcp;
 
-    auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
-    tcp::acceptor a(ex, loopback_ep);
-    tcp::socket s1(ex), s2(ex);
+  auto loopback_ep = tcp::endpoint(asio::ip::address_v4::loopback(), 0);
+  tcp::acceptor a(ex, loopback_ep);
+  tcp::socket s1(ex), s2(ex);
 
-    WaitCondition wc(ex);
+  WaitCondition wc(ex);
 
-    yield.spawn([&, lock = wc.lock()] (Async yield) mutable {
-            unwrap(a.async_accept(s2, yield));
-        });
+  yield.spawn([&, lock = wc.lock()](Async yield) mutable {
+    unwrap(a.async_accept(s2, yield));
+  });
 
-    unwrap(s1.async_connect(a.local_endpoint(), yield));
-    wc.wait(yield);
+  unwrap(s1.async_connect(a.local_endpoint(), yield));
+  wc.wait(yield);
 
-    return make_pair(std::move(s1), std::move(s2));
+  return make_pair(std::move(s1), std::move(s2));
 }
 
-}} // namespaces
+} // namespace util
+} // namespace ouinet

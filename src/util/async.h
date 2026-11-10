@@ -1,14 +1,14 @@
 #pragma once
 
 #include "../namespaces.h"
+#include "../task.h"
 #include "../util/trace.h"
 #include "cancel.h"
-#include "../task.h"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_executor.hpp>
-#include <boost/asio/spawn.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/spawn.hpp>
 
 #include <expected>
 #include <type_traits>
@@ -28,229 +28,184 @@ namespace ouinet {
 // respectively.
 class Async {
 public:
-    class Cancelled : public std::exception {
-    public:
-        Cancelled() {}
+  class Cancelled : public std::exception {
+  public:
+    Cancelled() {}
 
-        virtual const char* what() const noexcept {
-           return "Operation has been cancelled";
-        }
+    virtual const char *what() const noexcept {
+      return "Operation has been cancelled";
+    }
 
-        virtual ~Cancelled() noexcept {}
-    };
+    virtual ~Cancelled() noexcept {}
+  };
 
-    using executor_type = asio::any_io_executor;
+  using executor_type = asio::any_io_executor;
 
 private:
-    template<class F> using DeprecatedApiResult
-        = std::invoke_result_t<F, Trace, Cancel, asio::yield_context>;
+  template <class F>
+  using DeprecatedApiResult =
+      std::invoke_result_t<F, Trace, Cancel, asio::yield_context>;
 
 public:
-    explicit Async(asio::yield_context asio_yield, Trace trace = {})
-        : _asio_yield(asio_yield)
-        , _trace(std::move(trace))
-    {}
+  explicit Async(asio::yield_context asio_yield, Trace trace = {})
+      : _asio_yield(asio_yield), _trace(std::move(trace)) {}
 
-    explicit Async(asio::yield_context asio_yield, Cancel cancel, Trace trace = {})
-        : _asio_yield(asio_yield)
-        , _trace(std::move(trace))
-        , _cancel(std::move(cancel))
-    {}
+  explicit Async(asio::yield_context asio_yield, Cancel cancel,
+                 Trace trace = {})
+      : _asio_yield(asio_yield), _trace(std::move(trace)),
+        _cancel(std::move(cancel)) {}
 
-    Async(Async&&) = default;
-    Async& operator=(Async&&) = default;
+  Async(Async &&) = default;
+  Async &operator=(Async &&) = default;
 
-    Async(const Async&) = default;
+  Async(const Async &) = default;
 
+  Trace trace() const { return _trace; }
 
-    Trace trace() const {
-        return _trace;
-    }
+  Async with_trace(Trace trace) const {
+    return Async(_asio_yield, _cancel, std::move(trace));
+  }
 
-    Async with_trace(Trace trace) const {
-        return Async(_asio_yield, _cancel, std::move(trace));
-    }
+  Async tag(std::string t) { return with_trace(_trace.tag(std::move(t))); }
 
-    Async tag(std::string t)
-    {
-        return with_trace(_trace.tag(std::move(t)));
-    }
+  asio::any_io_executor get_executor() const {
+    return _asio_yield.get_executor();
+  }
 
-    asio::any_io_executor get_executor() const {
-        return _asio_yield.get_executor();
-    }
+  void spawn(Cancel cancel, auto lambda) {
+    task::spawn_detached(
+        _asio_yield.get_executor(),
+        [lambda = std::move(lambda), cancel = std::move(cancel),
+         trace = _trace](asio::yield_context yield) mutable {
+          lambda(Async(yield, std::move(cancel), std::move(trace)));
+        });
+  }
 
-    void spawn(Cancel cancel, auto lambda) {
-        task::spawn_detached(
-            _asio_yield.get_executor(),
-            [ lambda = std::move(lambda),
-              cancel = std::move(cancel),
-              trace = _trace
-            ]
-            (asio::yield_context yield) mutable {
-                lambda(Async(yield, std::move(cancel), std::move(trace)));
-            });
-    }
+  void spawn(auto lambda) { spawn(_cancel, std::move(lambda)); }
 
-    void spawn(auto lambda) {
-        spawn(_cancel, std::move(lambda));
-    }
+  [[nodiscard]]
+  Cancel::Connection cancel_slot(auto lambda) {
+    return _cancel.connect(std::move(lambda));
+  }
 
-    [[nodiscard]]
-    Cancel::Connection cancel_slot(auto lambda) {
-        return _cancel.connect(std::move(lambda));
-    }
+  void cancel() { _cancel(); }
 
-    void cancel() {
-        _cancel();
-    }
+  const Cancel &get_cancel() const { return _cancel; }
 
-    const Cancel& get_cancel() const {
-        return _cancel;
-    }
+  bool is_cancelled() const { return _cancel; }
 
-    bool is_cancelled() const {
-        return _cancel;
-    }
+  /// Returns a `Async` derived from `this` but which does not get cancelled
+  /// when `this` gets cancelled.
+  Async suppress_cancel() { return Async(_asio_yield, _trace); }
 
-    /// Returns a `Async` derived from `this` but which does not get cancelled when `this` gets
-    /// cancelled.
-    Async suppress_cancel() {
-        return Async(_asio_yield, _trace);
-    }
+  friend std::ostream &operator<<(std::ostream &os, const Async &y) {
+    return os << y._trace;
+  }
 
-    friend std::ostream& operator<<(std::ostream& os, const Async& y) {
-        return os << y._trace;
-    }
+  // For running legacy API, try not to use it unless you feel confident in
+  // re-implementing the cancellation throwing logic.
+  asio::yield_context asio_yield() const { return _asio_yield; }
 
-    // For running legacy API, try not to use it unless you feel confident in
-    // re-implementing the cancellation throwing logic.
-    asio::yield_context asio_yield() const {
-        return _asio_yield;
-    }
-
-    template<class F>
+  template <class F>
     requires(!std::same_as<DeprecatedApiResult<F>, void>)
-    [[nodiscard]]
-    std::expected<DeprecatedApiResult<F>, sys::error_code>
-    call_deprecated(F f) {
-        sys::error_code ec;
-        auto ret = f(_trace, _cancel, _asio_yield[ec]);
-        if (_cancel) throw Cancelled();
-        if (ec) return std::unexpected(ec);
-        return ret;
-    }
+  [[nodiscard]]
+  std::expected<DeprecatedApiResult<F>, sys::error_code> call_deprecated(F f) {
+    sys::error_code ec;
+    auto ret = f(_trace, _cancel, _asio_yield[ec]);
+    if (_cancel)
+      throw Cancelled();
+    if (ec)
+      return std::unexpected(ec);
+    return ret;
+  }
 
-    template<class F>
+  template <class F>
     requires(std::same_as<DeprecatedApiResult<F>, void>)
-    [[nodiscard]]
-    sys::error_code
-    call_deprecated(F f) {
-        sys::error_code ec;
-        f(_trace, _cancel, _asio_yield[ec]);
-        if (_cancel) throw Cancelled();
-        return ec;
-    }
+  [[nodiscard]]
+  sys::error_code call_deprecated(F f) {
+    sys::error_code ec;
+    f(_trace, _cancel, _asio_yield[ec]);
+    if (_cancel)
+      throw Cancelled();
+    return ec;
+  }
 
 private:
-    template<typename, asio::completion_signature...> friend class ::boost::asio::async_result;
+  template <typename, asio::completion_signature...>
+  friend class ::boost::asio::async_result;
 
-    asio::yield_context _asio_yield;
-    Trace _trace;
-    Cancel _cancel;
+  asio::yield_context _asio_yield;
+  Trace _trace;
+  Cancel _cancel;
 };
 
-static_assert(std::is_same_v<
-    asio::associated_executor_t<Async>,
-    asio::any_io_executor
->);
+static_assert(
+    std::is_same_v<asio::associated_executor_t<Async>, asio::any_io_executor>);
 
 namespace detail {
 
-template<typename Function>
-requires std::invocable<Function, Async>
-auto make_coroutine(Function&& func, Cancel cancel, Trace trace) {
-    return [
-        func = std::forward<Function>(func),
-        cancel = std::move(cancel),
-        trace = std::move(trace)
-    ] (boost::asio::yield_context yield) mutable {
-        func(Async(yield, std::move(cancel), std::move(trace)));
-    };
+template <typename Function>
+  requires std::invocable<Function, Async>
+auto make_coroutine(Function &&func, Cancel cancel, Trace trace) {
+  return [func = std::forward<Function>(func), cancel = std::move(cancel),
+          trace = std::move(trace)](boost::asio::yield_context yield) mutable {
+    func(Async(yield, std::move(cancel), std::move(trace)));
+  };
 }
 
 } // namespace detail
 
 /// Spawns a top-level coroutine
-template<typename Function>
-requires std::invocable<Function, Async>
+template <typename Function>
+  requires std::invocable<Function, Async>
 void spawn_detached(
-    const boost::asio::any_io_executor& exec,
-    Cancel cancel,
-    Trace trace,
-    Function&& func,
-    std::source_location location = std::source_location::current()
-)
-{
-    task::spawn_detached(
-        exec,
-        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), std::move(trace)),
-        std::move(location)
-    );
+    const boost::asio::any_io_executor &exec, Cancel cancel, Trace trace,
+    Function &&func,
+    std::source_location location = std::source_location::current()) {
+  task::spawn_detached(exec,
+                       detail::make_coroutine(std::forward<Function>(func),
+                                              std::move(cancel),
+                                              std::move(trace)),
+                       std::move(location));
 }
 
 /// Spawns a top-level coroutine
-template<typename Function>
-requires std::invocable<Function, Async>
+template <typename Function>
+  requires std::invocable<Function, Async>
 void spawn_detached(
-    const boost::asio::any_io_executor& exec,
-    Cancel cancel,
-    Function&& func,
-    std::source_location location = std::source_location::current()
-)
-{
-    task::spawn_detached(
-        exec,
-        detail::make_coroutine(std::forward<Function>(func), std::move(cancel), Trace()),
-        std::move(location)
-    );
+    const boost::asio::any_io_executor &exec, Cancel cancel, Function &&func,
+    std::source_location location = std::source_location::current()) {
+  task::spawn_detached(exec,
+                       detail::make_coroutine(std::forward<Function>(func),
+                                              std::move(cancel), Trace()),
+                       std::move(location));
 }
 
 /// Spawns a top-level coroutine
-template<typename Function>
-requires std::invocable<Function, Async>
+template <typename Function>
+  requires std::invocable<Function, Async>
 void spawn_detached(
-    const boost::asio::any_io_executor& exec,
-    Trace trace,
-    Function&& func,
-    std::source_location location = std::source_location::current()
-)
-{
-    task::spawn_detached(
-        exec,
-        detail::make_coroutine(std::forward<Function>(func), Cancel(), std::move(trace)),
-        std::move(location)
-    );
+    const boost::asio::any_io_executor &exec, Trace trace, Function &&func,
+    std::source_location location = std::source_location::current()) {
+  task::spawn_detached(exec,
+                       detail::make_coroutine(std::forward<Function>(func),
+                                              Cancel(), std::move(trace)),
+                       std::move(location));
 }
 
 /// Spawns a top-level coroutine
-template<typename Function>
-requires std::invocable<Function, Async>
+template <typename Function>
+  requires std::invocable<Function, Async>
 void spawn_detached(
-    const boost::asio::any_io_executor& exec,
-    Function&& func,
-    std::source_location location = std::source_location::current()
-)
-{
-    task::spawn_detached(
-        exec,
-        detail::make_coroutine(std::forward<Function>(func), Cancel(), Trace()),
-        std::move(location)
-    );
+    const boost::asio::any_io_executor &exec, Function &&func,
+    std::source_location location = std::source_location::current()) {
+  task::spawn_detached(
+      exec,
+      detail::make_coroutine(std::forward<Function>(func), Cancel(), Trace()),
+      std::move(location));
 }
 
-
-} // ouinet namespace
+} // namespace ouinet
 
 // This code allows `Async` to be passed to functions expecting a
 // generic completion token.
@@ -258,131 +213,130 @@ void spawn_detached(
 // Inspired by Boost.Outcome code:
 // https://www.boost.org/doc/libs/1_89_0/libs/outcome/doc/html/recipes/asio-integration-1-70.html
 namespace boost::asio {
-    namespace detail {
-        template<class E> concept IsEc = std::convertible_to<E, boost::system::error_code>;
+namespace detail {
+template <class E>
+concept IsEc = std::convertible_to<E, boost::system::error_code>;
 
-        template<typename Sig>    struct ReturnType;
-        template<>                struct ReturnType<void()>     { using type = void; };
-        template<IsEc E>          struct ReturnType<void(E)>    { using type = std::expected<void, boost::system::error_code>; };
-        template<IsEc E, class T> struct ReturnType<void(E, T)> { using type = std::expected<T, boost::system::error_code>; };
+template <typename Sig> struct ReturnType;
+template <> struct ReturnType<void()> {
+  using type = void;
+};
+template <IsEc E> struct ReturnType<void(E)> {
+  using type = std::expected<void, boost::system::error_code>;
+};
+template <IsEc E, class T> struct ReturnType<void(E, T)> {
+  using type = std::expected<T, boost::system::error_code>;
+};
 
-        // Note: in the non `void()` cases we still call the asio handler with
-        // first arg being `error_code` to instruct asio that it shouldn't
-        // throw on error.
-        template<typename Sig>       struct ChangeSig;
-        template<>                   struct ChangeSig<void()>     { using type = void(); };
-        template<IsEc E>             struct ChangeSig<void(E)>    { using type = void(boost::system::error_code, std::expected<void, boost::system::error_code>); };
-        template<IsEc E, typename T> struct ChangeSig<void(E, T)> { using type = void(boost::system::error_code, std::expected<T, boost::system::error_code>); };
+// Note: in the non `void()` cases we still call the asio handler with
+// first arg being `error_code` to instruct asio that it shouldn't
+// throw on error.
+template <typename Sig> struct ChangeSig;
+template <> struct ChangeSig<void()> {
+  using type = void();
+};
+template <IsEc E> struct ChangeSig<void(E)> {
+  using type = void(boost::system::error_code,
+                    std::expected<void, boost::system::error_code>);
+};
+template <IsEc E, typename T> struct ChangeSig<void(E, T)> {
+  using type = void(boost::system::error_code,
+                    std::expected<T, boost::system::error_code>);
+};
 
-        template<typename Handler, typename Sig> struct Wrap;
+template <typename Handler, typename Sig> struct Wrap;
 
-        template<typename Handler> struct Wrap<Handler, void()> {
-            using executor_type = asio::associated_executor_t<Handler>;
+template <typename Handler> struct Wrap<Handler, void()> {
+  using executor_type = asio::associated_executor_t<Handler>;
 
-            Handler handler;
+  Handler handler;
 
-            void operator() () {
-                handler();
-            }
+  void operator()() { handler(); }
 
-            executor_type get_executor() const {
-                return handler.get_executor();
-            }
-        };
+  executor_type get_executor() const { return handler.get_executor(); }
+};
 
-        template<typename Handler, IsEc E> struct Wrap<Handler, void(E)> {
-            using executor_type = asio::associated_executor_t<Handler>;
+template <typename Handler, IsEc E> struct Wrap<Handler, void(E)> {
+  using executor_type = asio::associated_executor_t<Handler>;
 
-            Handler handler;
+  Handler handler;
 
-            void operator() (boost::system::error_code ec) {
-                if (!ec) {
-                    handler(boost::system::error_code{},
-                            std::expected<void, boost::system::error_code>());
-                } else {
-                    handler(boost::system::error_code{}, std::unexpected(ec));
-                }
-            }
+  void operator()(boost::system::error_code ec) {
+    if (!ec) {
+      handler(boost::system::error_code{},
+              std::expected<void, boost::system::error_code>());
+    } else {
+      handler(boost::system::error_code{}, std::unexpected(ec));
+    }
+  }
 
-            executor_type get_executor() const {
-                return handler.get_executor();
-            }
-        };
+  executor_type get_executor() const { return handler.get_executor(); }
+};
 
-        template<typename Handler, IsEc E, typename T> struct Wrap<Handler, void(E, T)> {
-            using executor_type = asio::associated_executor_t<Handler>;
+template <typename Handler, IsEc E, typename T>
+struct Wrap<Handler, void(E, T)> {
+  using executor_type = asio::associated_executor_t<Handler>;
 
-            Handler handler;
+  Handler handler;
 
-            void operator() (boost::system::error_code ec, T arg) {
-                if (!ec) {
-                    handler(boost::system::error_code{},
-                            std::expected<T, boost::system::error_code>(std::move(arg)));
-                } else {
-                    handler(boost::system::error_code{}, std::unexpected(ec));
-                }
-            }
+  void operator()(boost::system::error_code ec, T arg) {
+    if (!ec) {
+      handler(boost::system::error_code{},
+              std::expected<T, boost::system::error_code>(std::move(arg)));
+    } else {
+      handler(boost::system::error_code{}, std::unexpected(ec));
+    }
+  }
 
-            executor_type get_executor() const {
-                return handler.get_executor();
-            }
-        };
-    } // namespace
+  executor_type get_executor() const { return handler.get_executor(); }
+};
+} // namespace detail
 
-    template<typename Signature>
-    class async_result<ouinet::Async, Signature> {
-    public:
-        using return_type = typename detail::ReturnType<Signature>::type;
+template <typename Signature> class async_result<ouinet::Async, Signature> {
+public:
+  using return_type = typename detail::ReturnType<Signature>::type;
 
-        template<typename Initiation, typename... Args>
-        requires(!std::same_as<return_type, void>)
-        static return_type
-        initiate(Initiation&& initiation, const ouinet::Async& token, Args&&... args)
-        {
-            return_type ret = async_initiate_impl(
-                    std::forward<Initiation>(initiation),
-                    token,
-                    std::forward<Args>(args)...);
+  template <typename Initiation, typename... Args>
+    requires(!std::same_as<return_type, void>)
+  static return_type initiate(Initiation &&initiation,
+                              const ouinet::Async &token, Args &&...args) {
+    return_type ret = async_initiate_impl(std::forward<Initiation>(initiation),
+                                          token, std::forward<Args>(args)...);
 
-            if (token._cancel) throw ouinet::Async::Cancelled();
-            return ret;
-        }
+    if (token._cancel)
+      throw ouinet::Async::Cancelled();
+    return ret;
+  }
 
-        // Specialization of the above to `void` return types.
-        template<typename Initiation, typename... Args>
-        requires(std::same_as<return_type, void>)
-        static void
-        initiate(Initiation&& initiation, const ouinet::Async& token, Args&&... args)
-        {
-            async_initiate_impl(
-                    std::forward<Initiation>(initiation),
-                    token,
-                    std::forward<Args>(args)...);
+  // Specialization of the above to `void` return types.
+  template <typename Initiation, typename... Args>
+    requires(std::same_as<return_type, void>)
+  static void initiate(Initiation &&initiation, const ouinet::Async &token,
+                       Args &&...args) {
+    async_initiate_impl(std::forward<Initiation>(initiation), token,
+                        std::forward<Args>(args)...);
 
-            if (token._cancel) throw ouinet::Async::Cancelled();
-        }
+    if (token._cancel)
+      throw ouinet::Async::Cancelled();
+  }
 
-    private:
-        template<typename Initiation, typename... Args>
-        static auto
-        async_initiate_impl(Initiation&& initiation, const ouinet::Async& token, Args&&... args)
-        {
-            auto asio_yield = token._asio_yield;
+private:
+  template <typename Initiation, typename... Args>
+  static auto async_initiate_impl(Initiation &&initiation,
+                                  const ouinet::Async &token, Args &&...args) {
+    auto asio_yield = token._asio_yield;
 
-            using OurSig = typename detail::ChangeSig<Signature>::type;
+    using OurSig = typename detail::ChangeSig<Signature>::type;
 
-            return async_initiate<yield_context, OurSig>(
-                [ init = std::forward<Initiation>(initiation)
-                ]
-                (auto&& handler, auto&&... call_args) mutable {
-                    std::move(init)( detail::Wrap<
-                                        std::decay_t<decltype(handler)>,
-                                        Signature
-                                     >{ std::forward<decltype(handler)>(handler) }
-                                   , std::forward<decltype(call_args)>(call_args)...);
-                },
-                asio_yield,
-                std::forward<Args>(args)...);
-        }
-    };
+    return async_initiate<yield_context, OurSig>(
+        [init = std::forward<Initiation>(initiation)](
+            auto &&handler, auto &&...call_args) mutable {
+          std::move(init)(
+              detail::Wrap<std::decay_t<decltype(handler)>, Signature>{
+                  std::forward<decltype(handler)>(handler)},
+              std::forward<decltype(call_args)>(call_args)...);
+        },
+        asio_yield, std::forward<Args>(args)...);
+  }
+};
 } // namespace boost::asio

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include "response_part.h"
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 namespace ouinet {
 
@@ -10,20 +10,18 @@ namespace ouinet {
 // verification takes place.
 class SignedHead : public http_response::Head {
 public:
+  SignedHead() = default;
 
-    SignedHead() = default;
+  static SignedHead parse(http_response::Head raw_head, sys::error_code &);
 
-    static SignedHead parse(http_response::Head raw_head, sys::error_code&);
-
-    boost::posix_time::ptime time_stamp() const { return _time_stamp; }
-
-private:
-    SignedHead(http_response::Head raw_head)
-        : http_response::Head(std::move(raw_head))
-    {}
+  boost::posix_time::ptime time_stamp() const { return _time_stamp; }
 
 private:
-    boost::posix_time::ptime _time_stamp;
+  SignedHead(http_response::Head raw_head)
+      : http_response::Head(std::move(raw_head)) {}
+
+private:
+  boost::posix_time::ptime _time_stamp;
 };
 
-} // namespace
+} // namespace ouinet

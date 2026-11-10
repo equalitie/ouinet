@@ -1,8 +1,8 @@
 #pragma once
 
-#include <list>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/optional.hpp>
+#include <list>
 
 #include "../ouiservice.h"
 #include "api.h"
@@ -13,43 +13,42 @@ class Async;
 
 namespace ouiservice {
 
-class OUINET_COMMON_API TcpOuiServiceServer : public OuiServiceImplementationServer
-{
-    public:
-    TcpOuiServiceServer(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
+class OUINET_COMMON_API TcpOuiServiceServer
+    : public OuiServiceImplementationServer {
+public:
+  TcpOuiServiceServer(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
 
-    [[nodiscard]]
-    sys::error_code start_listen(Async) override;
+  [[nodiscard]]
+  sys::error_code start_listen(Async) override;
 
-    void stop_listen() override;
+  void stop_listen() override;
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> accept(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> accept(Async) override;
 
-    private:
-    asio::any_io_executor _ex;
-    asio::ip::tcp::acceptor _acceptor;
-    asio::ip::tcp::endpoint _endpoint;
+private:
+  asio::any_io_executor _ex;
+  asio::ip::tcp::acceptor _acceptor;
+  asio::ip::tcp::endpoint _endpoint;
 };
 
-class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceClient
-{
-    public:
-    TcpOuiServiceClient(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
+class OUINET_COMMON_API TcpOuiServiceClient : public OuiServiceClient {
+public:
+  TcpOuiServiceClient(asio::any_io_executor, asio::ip::tcp::endpoint endpoint);
 
-    // Tcp clients don't have any internal async IO to be started/stopped.
-    [[nodiscard]]
-    sys::error_code start(Async) override;
+  // Tcp clients don't have any internal async IO to be started/stopped.
+  [[nodiscard]]
+  sys::error_code start(Async) override;
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> connect(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> connect(Async) override;
 
-    bool verify_endpoint() const { return (bool)_endpoint; }
+  bool verify_endpoint() const { return (bool)_endpoint; }
 
-    private:
-    asio::any_io_executor _ex;
-    boost::optional<asio::ip::tcp::endpoint> _endpoint;
+private:
+  asio::any_io_executor _ex;
+  boost::optional<asio::ip::tcp::endpoint> _endpoint;
 };
 
-} // ouiservice namespace
-} // ouinet namespace
+} // namespace ouiservice
+} // namespace ouinet

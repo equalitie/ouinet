@@ -1,9 +1,9 @@
 #include "dht_groups.h"
 #include "../logger.h"
-#include "../util/file_io.h"
-#include "../util/bytes.h"
-#include "../util/hash.h"
 #include "../util/async.h"
+#include "../util/bytes.h"
+#include "../util/file_io.h"
+#include "../util/hash.h"
 
 #include <algorithm>
 #include <map>
@@ -12,648 +12,618 @@ using namespace ouinet;
 
 #define _LOGPFX "DHT Groups: "
 #define _DEBUG(...) LOG_DEBUG(_LOGPFX, __VA_ARGS__)
-#define _WARN(...)  LOG_WARN(_LOGPFX, __VA_ARGS__)
+#define _WARN(...) LOG_WARN(_LOGPFX, __VA_ARGS__)
 #define _ERROR(...) LOG_ERROR(_LOGPFX, __VA_ARGS__)
 
 namespace file_io = util::file_io;
-using sys::errc::make_error_code;
 using cache::ResourceId;
+using sys::errc::make_error_code;
 
 // https://stackoverflow.com/a/417184/273348
 #define MAX_URL_SIZE 2000
 
 // Name of the file used to indicate that a group is pinned
-constexpr std::string group_pin="pinned";
+constexpr std::string group_pin = "pinned";
 
 class DhtGroupsImpl {
 public:
-    using GroupName = BaseDhtGroups::GroupName;
+  using GroupName = BaseDhtGroups::GroupName;
 
 public:
-    ~DhtGroupsImpl();
+  ~DhtGroupsImpl();
 
-    [[nodiscard]]
-    static std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
-    load_trusted(fs::path root_dir, Async y)
-    { return load(std::move(root_dir), true, y); }
+  [[nodiscard]]
+  static std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
+  load_trusted(fs::path root_dir, Async y) {
+    return load(std::move(root_dir), true, y);
+  }
 
-    [[nodiscard]]
-    static std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
-    load_untrusted(fs::path root_dir, Async y)
-    { return load(std::move(root_dir), false, y); }
+  [[nodiscard]]
+  static std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
+  load_untrusted(fs::path root_dir, Async y) {
+    return load(std::move(root_dir), false, y);
+  }
 
-    std::set<GroupName> groups() const;
-    std::set<DhtGroups::GroupName> pinned_groups();
-    std::set<ResourceId> items(const GroupName&) const;
+  std::set<GroupName> groups() const;
+  std::set<DhtGroups::GroupName> pinned_groups();
+  std::set<ResourceId> items(const GroupName &) const;
 
-    [[nodiscard]]
-    std::expected<void, sys::error_code>
-    add(const GroupName&, const ResourceId&, Async);
+  [[nodiscard]]
+  std::expected<void, sys::error_code> add(const GroupName &,
+                                           const ResourceId &, Async);
 
-    std::set<GroupName> remove(const ResourceId&);
-    std::set<GroupName> remove(const ResourceId&, bool&);
+  std::set<GroupName> remove(const ResourceId &);
+  std::set<GroupName> remove(const ResourceId &, bool &);
 
-    void remove_group(const GroupName&);
+  void remove_group(const GroupName &);
 
-    bool is_pinned(const GroupName&, sys::error_code&);
-    bool is_pinned(const ResourceId&);
-    bool pin_group(const GroupName&, sys::error_code&);
-    bool unpin_group(const GroupName&, sys::error_code&);
-
-private:
-    using Group  = std::pair<GroupName, std::set<ResourceId>>;
-    using Groups = std::map<GroupName, std::set<ResourceId>>;
-
-    DhtGroupsImpl(AsioExecutor, fs::path root_dir, Groups);
-
-    DhtGroupsImpl(const DhtGroupsImpl&) = delete;
-    DhtGroupsImpl(DhtGroupsImpl&&)      = delete;
-
-    [[nodiscard]]
-    static
-    std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
-    load(fs::path root_dir, bool trusted, Async);
-
-    [[nodiscard]]
-    static
-    std::expected<Group, sys::error_code>
-    load_group(const fs::path dir, bool trusted, Async);
-
-    fs::path group_path(const GroupName&);
-    fs::path items_path(const GroupName&);
-    fs::path item_path(const GroupName&, const ResourceId&);
+  bool is_pinned(const GroupName &, sys::error_code &);
+  bool is_pinned(const ResourceId &);
+  bool pin_group(const GroupName &, sys::error_code &);
+  bool unpin_group(const GroupName &, sys::error_code &);
 
 private:
-    AsioExecutor _ex;
-    fs::path _root_dir;
-    Groups _groups;
-    Cancel _lifetime_cancel;
+  using Group = std::pair<GroupName, std::set<ResourceId>>;
+  using Groups = std::map<GroupName, std::set<ResourceId>>;
+
+  DhtGroupsImpl(AsioExecutor, fs::path root_dir, Groups);
+
+  DhtGroupsImpl(const DhtGroupsImpl &) = delete;
+  DhtGroupsImpl(DhtGroupsImpl &&) = delete;
+
+  [[nodiscard]]
+  static std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
+  load(fs::path root_dir, bool trusted, Async);
+
+  [[nodiscard]]
+  static std::expected<Group, sys::error_code> load_group(const fs::path dir,
+                                                          bool trusted, Async);
+
+  fs::path group_path(const GroupName &);
+  fs::path items_path(const GroupName &);
+  fs::path item_path(const GroupName &, const ResourceId &);
+
+private:
+  AsioExecutor _ex;
+  fs::path _root_dir;
+  Groups _groups;
+  Cancel _lifetime_cancel;
 };
 
 DhtGroupsImpl::DhtGroupsImpl(AsioExecutor ex, fs::path root_dir, Groups groups)
-    : _ex(ex)
-    , _root_dir(std::move(root_dir))
-    , _groups(std::move(groups))
-{}
+    : _ex(ex), _root_dir(std::move(root_dir)), _groups(std::move(groups)) {}
 
-static
-void
-try_remove(const fs::path& path)
-{
-    _DEBUG("Removing cached response: ", path);
-    sys::error_code ec;
-    fs::remove_all(path, ec);
-    if (ec) _WARN( "Failed to remove cached response: "
-                 , path, "; ec=", ec);
-    // The parent directory may be left empty.
+static void try_remove(const fs::path &path) {
+  _DEBUG("Removing cached response: ", path);
+  sys::error_code ec;
+  fs::remove_all(path, ec);
+  if (ec)
+    _WARN("Failed to remove cached response: ", path, "; ec=", ec);
+  // The parent directory may be left empty.
 }
 
 [[nodiscard]]
-static
-std::expected<std::string, sys::error_code>
-read_file(fs::path p, Async y)
-{
-    if (!fs::is_regular_file(p)) {
-        _ERROR("Not a regular file: ", p);
-        return std::unexpected(make_error_code(sys::errc::invalid_argument));
-    }
+static std::expected<std::string, sys::error_code> read_file(fs::path p,
+                                                             Async y) {
+  if (!fs::is_regular_file(p)) {
+    _ERROR("Not a regular file: ", p);
+    return std::unexpected(make_error_code(sys::errc::invalid_argument));
+  }
 
-    auto f = file_io::open_readonly(y.get_executor(), p);
-    if (!f) return std::unexpected(f.error());
+  auto f = file_io::open_readonly(y.get_executor(), p);
+  if (!f)
+    return std::unexpected(f.error());
 
-    auto size = file_io::file_size(*f);
-    if (!size) return std::unexpected(size.error());
+  auto size = file_io::file_size(*f);
+  if (!size)
+    return std::unexpected(size.error());
 
-    if (*size > MAX_URL_SIZE)
-        return std::unexpected(make_error_code(sys::errc::value_too_large));
+  if (*size > MAX_URL_SIZE)
+    return std::unexpected(make_error_code(sys::errc::value_too_large));
 
-    std::string ret(*size, '\0');
-    if (auto r = file_io::read(*f, asio::buffer(ret), y); !r) {
-        return std::unexpected(r.error());
-    }
+  std::string ret(*size, '\0');
+  if (auto r = file_io::read(*f, asio::buffer(ret), y); !r) {
+    return std::unexpected(r.error());
+  }
 
-    return ret;
+  return ret;
 }
 
-std::string sha1_hex_digest(const std::string& s) {
-    return util::bytes::to_hex(util::sha1_digest(s));
+std::string sha1_hex_digest(const std::string &s) {
+  return util::bytes::to_hex(util::sha1_digest(s));
 }
 
 /* static */
 [[nodiscard]]
 std::expected<DhtGroupsImpl::Group, sys::error_code>
-DhtGroupsImpl::load_group(const fs::path dir, bool trusted, Async yield)
-{
-    assert(fs::is_directory(dir));
+DhtGroupsImpl::load_group(const fs::path dir, bool trusted, Async yield) {
+  assert(fs::is_directory(dir));
 
-    auto group_name = read_file(dir/"group_name", yield);
+  auto group_name = read_file(dir / "group_name", yield);
 
-    if (!group_name) {
-        return std::unexpected(group_name.error());
+  if (!group_name) {
+    return std::unexpected(group_name.error());
+  }
+
+  if (!trusted && dir.filename() != sha1_hex_digest(*group_name)) {
+    _ERROR("Group name does not match its path: ", dir);
+    return std::unexpected(make_error_code(sys::errc::invalid_argument));
+  }
+
+  fs::path items_dir = dir / "items";
+
+  if (!fs::exists(items_dir)) {
+    return Group{std::move(*group_name), {}};
+  }
+
+  if (!fs::is_directory(items_dir)) {
+    _ERROR(items_dir, " is not a directory");
+    return std::unexpected(make_error_code(sys::errc::not_a_directory));
+  }
+
+  Group::second_type items;
+
+  for (auto f : fs::directory_iterator(items_dir)) {
+    auto path = f.path().filename();
+    auto resource_id = cache::ResourceId::from_hex(path.c_str());
+    if (!resource_id) {
+      _ERROR("Group item file name is not a valid ResourceId: ",
+             items_dir / path);
+      continue;
     }
+    items.insert(std::move(*resource_id));
+  }
 
-    if (!trusted && dir.filename() != sha1_hex_digest(*group_name)) {
-        _ERROR("Group name does not match its path: ", dir);
-        return std::unexpected(make_error_code(sys::errc::invalid_argument));
-    }
-
-    fs::path items_dir = dir/"items";
-
-    if (!fs::exists(items_dir)) {
-        return Group{std::move(*group_name), {}};
-    }
-
-    if (!fs::is_directory(items_dir)) {
-        _ERROR(items_dir, " is not a directory");
-        return std::unexpected(make_error_code(sys::errc::not_a_directory));
-    }
-
-    Group::second_type items;
-
-    for (auto f : fs::directory_iterator(items_dir)) {
-        auto path = f.path().filename();
-        auto resource_id = cache::ResourceId::from_hex(path.c_str());
-        if (!resource_id) {
-            _ERROR("Group item file name is not a valid ResourceId: ", items_dir/path);
-            continue;
-        }
-        items.insert(std::move(*resource_id));
-    }
-
-    return Group{std::move(*group_name), std::move(items)};
+  return Group{std::move(*group_name), std::move(items)};
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const
-{
-    std::set<DhtGroups::GroupName> ret;
+std::set<DhtGroups::GroupName> DhtGroupsImpl::groups() const {
+  std::set<DhtGroups::GroupName> ret;
 
-    for (auto& group : _groups) {
-        ret.insert(group.first);
-    }
+  for (auto &group : _groups) {
+    ret.insert(group.first);
+  }
 
-    return ret;
+  return ret;
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::pinned_groups()
-{
-    std::set<DhtGroups::GroupName> ret;
-    sys::error_code ignored_ec;
+std::set<DhtGroups::GroupName> DhtGroupsImpl::pinned_groups() {
+  std::set<DhtGroups::GroupName> ret;
+  sys::error_code ignored_ec;
 
-    for (auto& group : _groups) {
-        GroupName group_name = group.first;
-        if (is_pinned(group_name, ignored_ec))
-        {
-            ret.insert(group_name);
-        }
+  for (auto &group : _groups) {
+    GroupName group_name = group.first;
+    if (is_pinned(group_name, ignored_ec)) {
+      ret.insert(group_name);
     }
+  }
 
-    return ret;
+  return ret;
 }
 
-std::set<ResourceId> DhtGroupsImpl::items(const GroupName& gn) const
-{
-    std::set<ResourceId> ret;
+std::set<ResourceId> DhtGroupsImpl::items(const GroupName &gn) const {
+  std::set<ResourceId> ret;
 
-    auto gi = _groups.find(gn);
-    if (gi == _groups.end()) return ret;
-
-    for (auto& item : gi->second) {
-        ret.insert(item);
-    }
-
+  auto gi = _groups.find(gn);
+  if (gi == _groups.end())
     return ret;
+
+  for (auto &item : gi->second) {
+    ret.insert(item);
+  }
+
+  return ret;
 }
 
 /* static */
 std::expected<std::unique_ptr<DhtGroupsImpl>, sys::error_code>
-DhtGroupsImpl::load( fs::path root_dir
-                   , bool trusted
-                   , Async yield)
-{
-    namespace err = asio::error;
+DhtGroupsImpl::load(fs::path root_dir, bool trusted, Async yield) {
+  namespace err = asio::error;
 
-    Groups groups;
+  Groups groups;
 
-    if (fs::exists(root_dir)) {
-        if (!fs::is_directory(root_dir)) {
-            _ERROR("Not a directory: '", root_dir, "'");
-            return std::unexpected(make_error_code(sys::errc::not_a_directory));
-        }
-    } else if (trusted) {
-        sys::error_code ec;
-        fs::create_directories(root_dir, ec);
-        if (ec) {
-            _ERROR("Failed to create directory: ", root_dir, "; ec=", ec);
-            return std::unexpected(ec);
-        }
-    } else {
-        _ERROR("Groups directory does not exist: ", root_dir);
-        return std::unexpected(make_error_code(sys::errc::no_such_file_or_directory));
+  if (fs::exists(root_dir)) {
+    if (!fs::is_directory(root_dir)) {
+      _ERROR("Not a directory: '", root_dir, "'");
+      return std::unexpected(make_error_code(sys::errc::not_a_directory));
+    }
+  } else if (trusted) {
+    sys::error_code ec;
+    fs::create_directories(root_dir, ec);
+    if (ec) {
+      _ERROR("Failed to create directory: ", root_dir, "; ec=", ec);
+      return std::unexpected(ec);
+    }
+  } else {
+    _ERROR("Groups directory does not exist: ", root_dir);
+    return std::unexpected(
+        make_error_code(sys::errc::no_such_file_or_directory));
+  }
+
+  for (auto f : fs::directory_iterator(root_dir)) {
+    if (!fs::is_directory(f)) {
+      _ERROR("Non directory found in '", root_dir, "': '", f, "'");
+      continue;
     }
 
-    for (auto f : fs::directory_iterator(root_dir)) {
-        if (!fs::is_directory(f)) {
-            _ERROR("Non directory found in '", root_dir, "': '", f, "'");
-            continue;
-        }
+    auto group = load_group(f, trusted, yield);
 
-        auto group = load_group(f, trusted, yield);
-
-        if (!group) {
-            return std::unexpected(group.error());
-        }
-
-        if (group->second.empty()) {
-            _WARN("Not loading empty group: ", group->first);
-            if (trusted) try_remove(f);
-            continue;
-        }
-
-        groups.insert(std::move(*group));
+    if (!group) {
+      return std::unexpected(group.error());
     }
 
-    return std::unique_ptr<DhtGroupsImpl>
-        (new DhtGroupsImpl(yield.get_executor(), std::move(root_dir), std::move(groups)));
-}
-
-fs::path
-DhtGroupsImpl::group_path(const GroupName& group_name)
-{
-    return _root_dir / sha1_hex_digest(group_name);
-}
-
-fs::path
-DhtGroupsImpl::items_path(const GroupName& group_name)
-{
-    return group_path(group_name) / "items";
-}
-
-fs::path
-DhtGroupsImpl::item_path(const GroupName& group_name, const ResourceId& item_name)
-{
-    return items_path(group_name) / item_name.hex_string();
-}
-
-bool
-DhtGroupsImpl::is_pinned(const GroupName& group_name, sys::error_code& ec)
-{
-    fs::path group_p = group_path(group_name);
-    if (!exists(group_p, ec))
-    {
-        _ERROR("is_pinned failed; ", group_name,
-               " path doesn't exist ", group_p);
-        return false;
+    if (group->second.empty()) {
+      _WARN("Not loading empty group: ", group->first);
+      if (trusted)
+        try_remove(f);
+      continue;
     }
-    return fs::exists(group_path(group_name) / group_pin);
+
+    groups.insert(std::move(*group));
+  }
+
+  return std::unique_ptr<DhtGroupsImpl>(new DhtGroupsImpl(
+      yield.get_executor(), std::move(root_dir), std::move(groups)));
 }
 
-bool
-DhtGroupsImpl::is_pinned(const ResourceId& resource_id)
-{
-    for (auto pinned_group_name : pinned_groups()) {
-        if (fs::exists(item_path(pinned_group_name, resource_id))) {
-            return true;
-        }
-    }
+fs::path DhtGroupsImpl::group_path(const GroupName &group_name) {
+  return _root_dir / sha1_hex_digest(group_name);
+}
+
+fs::path DhtGroupsImpl::items_path(const GroupName &group_name) {
+  return group_path(group_name) / "items";
+}
+
+fs::path DhtGroupsImpl::item_path(const GroupName &group_name,
+                                  const ResourceId &item_name) {
+  return items_path(group_name) / item_name.hex_string();
+}
+
+bool DhtGroupsImpl::is_pinned(const GroupName &group_name,
+                              sys::error_code &ec) {
+  fs::path group_p = group_path(group_name);
+  if (!exists(group_p, ec)) {
+    _ERROR("is_pinned failed; ", group_name, " path doesn't exist ", group_p);
     return false;
+  }
+  return fs::exists(group_path(group_name) / group_pin);
 }
 
-bool
-DhtGroupsImpl::pin_group(const GroupName& group_name, sys::error_code& ec)
-{
-
-    fs::path group_p = group_path(group_name);
-    if (!exists(group_p, ec))
-    {
-        _ERROR("Pinning failed; ", group_name,
-               " path doesn't exist ", group_p);
-        return false;
+bool DhtGroupsImpl::is_pinned(const ResourceId &resource_id) {
+  for (auto pinned_group_name : pinned_groups()) {
+    if (fs::exists(item_path(pinned_group_name, resource_id))) {
+      return true;
     }
-
-    fs::path pin_path = group_p / group_pin;
-
-    if (auto r = file_io::open_or_create(_ex, pin_path); !r) {
-        _ERROR("Pinning failed; ", group_name, " ec=", r.error());
-        return false;
-    }
-
-    _DEBUG("Pinned ", group_name);
-    return true;
+  }
+  return false;
 }
 
-bool
-DhtGroupsImpl::unpin_group(const GroupName& group_name, sys::error_code& ec)
-{
+bool DhtGroupsImpl::pin_group(const GroupName &group_name,
+                              sys::error_code &ec) {
 
-    fs::path group_p = group_path(group_name);
-    if (!exists(group_p, ec))
-    {
-        _ERROR("Unpinning failed; ", group_name,
-               " path doesn't exist ", group_p);
-        return false;
-    }
+  fs::path group_p = group_path(group_name);
+  if (!exists(group_p, ec)) {
+    _ERROR("Pinning failed; ", group_name, " path doesn't exist ", group_p);
+    return false;
+  }
 
-    if (!is_pinned(group_name,ec))
-    {
-        _DEBUG("Unpinning skipped; ", group_name, " was already unpinned");
-        return true;
-    }
+  fs::path pin_path = group_p / group_pin;
 
-    fs::path pin_path = group_p / group_pin;
-    if (auto r = file_io::remove_file(pin_path); !r)
-    {
-        _ERROR("Unpinning failed; ", group_name, " ec=", r.error());
-        return false;
-    }
+  if (auto r = file_io::open_or_create(_ex, pin_path); !r) {
+    _ERROR("Pinning failed; ", group_name, " ec=", r.error());
+    return false;
+  }
 
-    _DEBUG("Unpinned ", group_name);
+  _DEBUG("Pinned ", group_name);
+  return true;
+}
+
+bool DhtGroupsImpl::unpin_group(const GroupName &group_name,
+                                sys::error_code &ec) {
+
+  fs::path group_p = group_path(group_name);
+  if (!exists(group_p, ec)) {
+    _ERROR("Unpinning failed; ", group_name, " path doesn't exist ", group_p);
+    return false;
+  }
+
+  if (!is_pinned(group_name, ec)) {
+    _DEBUG("Unpinning skipped; ", group_name, " was already unpinned");
     return true;
+  }
+
+  fs::path pin_path = group_p / group_pin;
+  if (auto r = file_io::remove_file(pin_path); !r) {
+    _ERROR("Unpinning failed; ", group_name, " ec=", r.error());
+    return false;
+  }
+
+  _DEBUG("Unpinned ", group_name);
+  return true;
 }
 
 std::expected<void, sys::error_code>
-DhtGroupsImpl::add( const GroupName& group_name
-                  , const ResourceId& item_name
-                  , Async yield)
-{
-    _DEBUG("Adding: ", group_name, " -> ", item_name);
-    fs::path group_p = group_path(group_name);
+DhtGroupsImpl::add(const GroupName &group_name, const ResourceId &item_name,
+                   Async yield) {
+  _DEBUG("Adding: ", group_name, " -> ", item_name);
+  fs::path group_p = group_path(group_name);
 
-    // Create the storage representation of the item in the group.
-    if (fs::exists(group_p)) {
-        if (!fs::is_directory(group_p)) {
-            return std::unexpected(make_error_code(sys::errc::not_a_directory));
-        }
-    } else {
-        sys::error_code ec;
-        fs::create_directories(group_p, ec);
-        if (ec) {
-            _ERROR("Failed to create directory for group: ", group_name, "; ec=", ec);
-            return std::unexpected(ec);
-        }
-
-        auto group_name_f = file_io::open_or_create(_ex, group_p/"group_name");
-        if (!group_name_f) {
-            _ERROR("Failed to create group name file for group: ", group_name, "; ec=", group_name_f.error());
-            try_remove(group_p);
-            return std::unexpected(group_name_f.error());
-        }
-
-        if (auto r = file_io::write(*group_name_f, asio::buffer(group_name), yield); !r) {
-            try_remove(group_p);
-            return std::unexpected(r.error());
-        }
+  // Create the storage representation of the item in the group.
+  if (fs::exists(group_p)) {
+    if (!fs::is_directory(group_p)) {
+      return std::unexpected(make_error_code(sys::errc::not_a_directory));
     }
-
-    auto items_p = items_path(group_name);
-
+  } else {
     sys::error_code ec;
-    if (!fs::is_directory(items_p)) {
-        fs::create_directories(items_p, ec);
-        if (ec) {
-            _ERROR("Failed to create items path: ", items_p, "; ec=", ec);
-            try_remove(group_p);
-            return std::unexpected(ec);
-        }
+    fs::create_directories(group_p, ec);
+    if (ec) {
+      _ERROR("Failed to create directory for group: ", group_name, "; ec=", ec);
+      return std::unexpected(ec);
     }
 
-    auto item_f = file_io::open_or_create(_ex, item_path(group_name, item_name));
-
-    if (!item_f) {
-        _ERROR("Failed to create group item; ec=", item_f.error());
-        if (fs::is_empty(items_p)) try_remove(group_p);
-        return std::unexpected(item_f.error());
+    auto group_name_f = file_io::open_or_create(_ex, group_p / "group_name");
+    if (!group_name_f) {
+      _ERROR("Failed to create group name file for group: ", group_name,
+             "; ec=", group_name_f.error());
+      try_remove(group_p);
+      return std::unexpected(group_name_f.error());
     }
 
-    if (auto r = file_io::truncate(*item_f, 0); !r) {
-        _ERROR("Failed to truncate group item file; ec=", r.error());
-        if (fs::is_empty(items_p)) try_remove(group_p);
-        return std::unexpected(r.error());
+    if (auto r = file_io::write(*group_name_f, asio::buffer(group_name), yield);
+        !r) {
+      try_remove(group_p);
+      return std::unexpected(r.error());
     }
+  }
 
-    //file_io::write(item_f, asio::buffer(item_name), cancel, yield[ec]);
+  auto items_p = items_path(group_name);
 
-    //if (ec) {
-    //    if (!cancel) {
-    //        _ERROR("Failed write to group item; ec=", ec);
-    //    }
-    //    if (fs::is_empty(items_p)) try_remove(group_p);
-    //    return or_throw(yield, ec);
-    //}
-
-    // Add the item to the group in memory.
-    const auto& group_it = _groups.find(group_name);
-    if (group_it == _groups.end()) {
-        _groups[group_name] = {item_name};  // new group
-        return {};
+  sys::error_code ec;
+  if (!fs::is_directory(items_p)) {
+    fs::create_directories(items_p, ec);
+    if (ec) {
+      _ERROR("Failed to create items path: ", items_p, "; ec=", ec);
+      try_remove(group_p);
+      return std::unexpected(ec);
     }
-    group_it->second.emplace(item_name);  // add item to existing group
+  }
+
+  auto item_f = file_io::open_or_create(_ex, item_path(group_name, item_name));
+
+  if (!item_f) {
+    _ERROR("Failed to create group item; ec=", item_f.error());
+    if (fs::is_empty(items_p))
+      try_remove(group_p);
+    return std::unexpected(item_f.error());
+  }
+
+  if (auto r = file_io::truncate(*item_f, 0); !r) {
+    _ERROR("Failed to truncate group item file; ec=", r.error());
+    if (fs::is_empty(items_p))
+      try_remove(group_p);
+    return std::unexpected(r.error());
+  }
+
+  // file_io::write(item_f, asio::buffer(item_name), cancel, yield[ec]);
+
+  // if (ec) {
+  //     if (!cancel) {
+  //         _ERROR("Failed write to group item; ec=", ec);
+  //     }
+  //     if (fs::is_empty(items_p)) try_remove(group_p);
+  //     return or_throw(yield, ec);
+  // }
+
+  // Add the item to the group in memory.
+  const auto &group_it = _groups.find(group_name);
+  if (group_it == _groups.end()) {
+    _groups[group_name] = {item_name}; // new group
     return {};
+  }
+  group_it->second.emplace(item_name); // add item to existing group
+  return {};
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ResourceId& item_name)
-{
-    bool _ = false;
-    return remove(item_name, _);
+std::set<DhtGroups::GroupName>
+DhtGroupsImpl::remove(const ResourceId &item_name) {
+  bool _ = false;
+  return remove(item_name, _);
 }
 
-std::set<DhtGroups::GroupName> DhtGroupsImpl::remove(const ResourceId& item_name, bool& group_pinned)
-{
-    std::set<GroupName> erased_groups;
+std::set<DhtGroups::GroupName>
+DhtGroupsImpl::remove(const ResourceId &item_name, bool &group_pinned) {
+  std::set<GroupName> erased_groups;
 
-    for (auto j = _groups.begin(); j != _groups.end();) {
-        auto gi = j; ++j;
+  for (auto j = _groups.begin(); j != _groups.end();) {
+    auto gi = j;
+    ++j;
 
-        auto& group_name = gi->first;
-        auto& items      = gi->second;
+    auto &group_name = gi->first;
+    auto &items = gi->second;
 
-        if (items.empty()) {
-            // This case shouldn't happen, but let's sanitize it anyway.
-            erased_groups.insert(group_name);
-            try_remove(group_path(group_name));
-            _groups.erase(gi);
-            continue;
-        }
-
-        auto i = items.find(item_name);
-        if (i == items.end()) continue;
-
-        sys::error_code ignored_ec;
-        if (is_pinned(group_name, ignored_ec))
-        {
-            group_pinned = true;
-            continue;
-        }
-
-        items.erase(i);
-        try_remove(item_path(group_name, item_name));
-
-        if (items.empty()) {
-            erased_groups.insert(group_name);
-            try_remove(group_path(group_name));
-            _groups.erase(gi);
-        }
+    if (items.empty()) {
+      // This case shouldn't happen, but let's sanitize it anyway.
+      erased_groups.insert(group_name);
+      try_remove(group_path(group_name));
+      _groups.erase(gi);
+      continue;
     }
 
-    return erased_groups;
+    auto i = items.find(item_name);
+    if (i == items.end())
+      continue;
+
+    sys::error_code ignored_ec;
+    if (is_pinned(group_name, ignored_ec)) {
+      group_pinned = true;
+      continue;
+    }
+
+    items.erase(i);
+    try_remove(item_path(group_name, item_name));
+
+    if (items.empty()) {
+      erased_groups.insert(group_name);
+      try_remove(group_path(group_name));
+      _groups.erase(gi);
+    }
+  }
+
+  return erased_groups;
 }
 
-void DhtGroupsImpl::remove_group(const GroupName& gn)
-{
-    auto gi = _groups.find(gn);
-    if (gi == _groups.end()) return;
+void DhtGroupsImpl::remove_group(const GroupName &gn) {
+  auto gi = _groups.find(gn);
+  if (gi == _groups.end())
+    return;
 
-    try_remove(group_path(gn));
-    _groups.erase(gi);
+  try_remove(group_path(gn));
+  _groups.erase(gi);
 }
 
-DhtGroupsImpl::~DhtGroupsImpl() {
-    _lifetime_cancel();
-}
+DhtGroupsImpl::~DhtGroupsImpl() { _lifetime_cancel(); }
 
 class DhtReadGroups : public BaseDhtGroups {
 public:
-    DhtReadGroups(std::unique_ptr<DhtGroupsImpl> impl)
-        : _impl(std::move(impl))
-    {}
-    ~DhtReadGroups() override = default;
+  DhtReadGroups(std::unique_ptr<DhtGroupsImpl> impl) : _impl(std::move(impl)) {}
+  ~DhtReadGroups() override = default;
 
-    std::set<GroupName> groups() const override
-    { return _impl->groups(); }
+  std::set<GroupName> groups() const override { return _impl->groups(); }
 
-    std::set<GroupName> pinned_groups() const override
-    { return _impl->pinned_groups(); }
+  std::set<GroupName> pinned_groups() const override {
+    return _impl->pinned_groups();
+  }
 
-    std::set<ResourceId> items(const GroupName& gn) const override
-    { return _impl->items(gn); }
+  std::set<ResourceId> items(const GroupName &gn) const override {
+    return _impl->items(gn);
+  }
 
 private:
-    std::unique_ptr<DhtGroupsImpl> _impl;
+  std::unique_ptr<DhtGroupsImpl> _impl;
 };
 
 std::expected<std::unique_ptr<BaseDhtGroups>, sys::error_code>
-ouinet::load_static_dht_groups(fs::path root_dir, Async yield)
-{
-    // TODO: security checks on loaded files
-    auto gs = DhtGroupsImpl::load_untrusted( std::move(root_dir), yield);
-    if (!gs) return std::unexpected(gs.error());
-    return std::make_unique<DhtReadGroups>(std::move(*gs));
+ouinet::load_static_dht_groups(fs::path root_dir, Async yield) {
+  // TODO: security checks on loaded files
+  auto gs = DhtGroupsImpl::load_untrusted(std::move(root_dir), yield);
+  if (!gs)
+    return std::unexpected(gs.error());
+  return std::make_unique<DhtReadGroups>(std::move(*gs));
 }
 
 class FullDhtGroups : public DhtGroups {
 public:
-    FullDhtGroups(std::unique_ptr<DhtGroupsImpl> impl)
-        : _impl(std::move(impl))
-    {}
-    ~FullDhtGroups() override = default;
+  FullDhtGroups(std::unique_ptr<DhtGroupsImpl> impl) : _impl(std::move(impl)) {}
+  ~FullDhtGroups() override = default;
 
-    std::set<GroupName> groups() const override
-    { return _impl->groups(); }
+  std::set<GroupName> groups() const override { return _impl->groups(); }
 
-    std::set<GroupName> pinned_groups() const override
-    { return _impl->pinned_groups(); }
+  std::set<GroupName> pinned_groups() const override {
+    return _impl->pinned_groups();
+  }
 
-    std::set<ResourceId> items(const GroupName& gn) const override
-    { return _impl->items(gn); }
+  std::set<ResourceId> items(const GroupName &gn) const override {
+    return _impl->items(gn);
+  }
 
-    [[nodiscard]]
-    std::expected<void, sys::error_code>
-    add(const GroupName& gn, const ResourceId& in, Async y) override
-    { return _impl->add(gn, in, y); }
+  [[nodiscard]]
+  std::expected<void, sys::error_code>
+  add(const GroupName &gn, const ResourceId &in, Async y) override {
+    return _impl->add(gn, in, y);
+  }
 
-    std::set<GroupName> remove(const ResourceId& in) override
-    { return _impl->remove(in); }
+  std::set<GroupName> remove(const ResourceId &in) override {
+    return _impl->remove(in);
+  }
 
-    std::set<GroupName> remove(const ResourceId& in, bool& group_pinned) override
-    { return _impl->remove(in, group_pinned); }
+  std::set<GroupName> remove(const ResourceId &in,
+                             bool &group_pinned) override {
+    return _impl->remove(in, group_pinned);
+  }
 
-    void remove_group(const GroupName& gn) override
-    { _impl->remove_group(gn); }
+  void remove_group(const GroupName &gn) override { _impl->remove_group(gn); }
 
-    bool is_pinned(const GroupName& gn, sys::error_code& ec) override
-    { return _impl->is_pinned(gn, ec); }
+  bool is_pinned(const GroupName &gn, sys::error_code &ec) override {
+    return _impl->is_pinned(gn, ec);
+  }
 
-    bool is_pinned(const ResourceId& resource_id) override
-    { return _impl->is_pinned(resource_id); }
+  bool is_pinned(const ResourceId &resource_id) override {
+    return _impl->is_pinned(resource_id);
+  }
 
-    bool pin_group(const GroupName& gn, sys::error_code& ec) override
-    { return _impl->pin_group(gn, ec); }
+  bool pin_group(const GroupName &gn, sys::error_code &ec) override {
+    return _impl->pin_group(gn, ec);
+  }
 
-    bool unpin_group(const GroupName& gn, sys::error_code& ec) override
-    { return _impl->unpin_group(gn, ec); }
+  bool unpin_group(const GroupName &gn, sys::error_code &ec) override {
+    return _impl->unpin_group(gn, ec);
+  }
 
 private:
-    std::unique_ptr<DhtGroupsImpl> _impl;
+  std::unique_ptr<DhtGroupsImpl> _impl;
 };
 
 std::expected<std::unique_ptr<DhtGroups>, sys::error_code>
-ouinet::load_dht_groups(fs::path root_dir, Async yield)
-{
-    auto gs = DhtGroupsImpl::load_trusted(std::move(root_dir), yield);
-    if (!gs) return std::unexpected(gs.error());
-    return std::make_unique<FullDhtGroups>(std::move(*gs));
+ouinet::load_dht_groups(fs::path root_dir, Async yield) {
+  auto gs = DhtGroupsImpl::load_trusted(std::move(root_dir), yield);
+  if (!gs)
+    return std::unexpected(gs.error());
+  return std::make_unique<FullDhtGroups>(std::move(*gs));
 }
 
 class BackedDhtGroups : public FullDhtGroups {
 public:
-    BackedDhtGroups( std::unique_ptr<DhtGroupsImpl> impl
-                   , std::unique_ptr<BaseDhtGroups> fg)
-        : FullDhtGroups(std::move(impl))
-        , fallback_groups(std::move(fg))
-    {}
-    ~BackedDhtGroups() override = default;
+  BackedDhtGroups(std::unique_ptr<DhtGroupsImpl> impl,
+                  std::unique_ptr<BaseDhtGroups> fg)
+      : FullDhtGroups(std::move(impl)), fallback_groups(std::move(fg)) {}
+  ~BackedDhtGroups() override = default;
 
-    std::set<GroupName> groups() const override
-    {
-        // No `std::set::merge` in C++14,
-        // see <https://stackoverflow.com/a/7089642>.
-        std::set<GroupName> ret;
-        auto groups_ = FullDhtGroups::groups();
-        auto fbgroups = fallback_groups->groups();
-        std::set_union( groups_.begin(), groups_.end()
-                      , fbgroups.begin(), fbgroups.end()
-                      , std::inserter(ret, ret.begin()) );
-        return ret;
-    }
+  std::set<GroupName> groups() const override {
+    // No `std::set::merge` in C++14,
+    // see <https://stackoverflow.com/a/7089642>.
+    std::set<GroupName> ret;
+    auto groups_ = FullDhtGroups::groups();
+    auto fbgroups = fallback_groups->groups();
+    std::set_union(groups_.begin(), groups_.end(), fbgroups.begin(),
+                   fbgroups.end(), std::inserter(ret, ret.begin()));
+    return ret;
+  }
 
-    std::set<ResourceId> items(const GroupName& gn) const override
-    {
-        // No `std::set::merge` in C++14,
-        // see <https://stackoverflow.com/a/7089642>.
-        std::set<ResourceId> ret;
-        auto items_ = FullDhtGroups::items(gn);
-        auto fbitems = fallback_groups->items(gn);
-        std::set_union( items_.begin(), items_.end()
-                      , fbitems.begin(), fbitems.end()
-                      , std::inserter(ret, ret.begin()) );
-        return ret;
-    }
+  std::set<ResourceId> items(const GroupName &gn) const override {
+    // No `std::set::merge` in C++14,
+    // see <https://stackoverflow.com/a/7089642>.
+    std::set<ResourceId> ret;
+    auto items_ = FullDhtGroups::items(gn);
+    auto fbitems = fallback_groups->items(gn);
+    std::set_union(items_.begin(), items_.end(), fbitems.begin(), fbitems.end(),
+                   std::inserter(ret, ret.begin()));
+    return ret;
+  }
 
-    std::set<GroupName> remove(const ResourceId& in) override
-    {
-        auto emptied = FullDhtGroups::remove(in);
-        auto fbgroups = fallback_groups->groups();
-        // Do not report groups still in fallback as emptied.
-        for (auto git = emptied.begin(); git != emptied.end(); ) {
-            if (fbgroups.find(*git) != fbgroups.end())
-                git = emptied.erase(git);
-            else
-                git++;
-        }
-        return emptied;
+  std::set<GroupName> remove(const ResourceId &in) override {
+    auto emptied = FullDhtGroups::remove(in);
+    auto fbgroups = fallback_groups->groups();
+    // Do not report groups still in fallback as emptied.
+    for (auto git = emptied.begin(); git != emptied.end();) {
+      if (fbgroups.find(*git) != fbgroups.end())
+        git = emptied.erase(git);
+      else
+        git++;
     }
+    return emptied;
+  }
 
 private:
-    std::unique_ptr<BaseDhtGroups> fallback_groups;
+  std::unique_ptr<BaseDhtGroups> fallback_groups;
 };
 
 std::expected<std::unique_ptr<DhtGroups>, sys::error_code>
-ouinet::load_backed_dht_groups( fs::path root_dir
-                              , std::unique_ptr<BaseDhtGroups> fallback_groups
-                              , Async yield)
-{
-    auto gs = DhtGroupsImpl::load_trusted( std::move(root_dir), yield);
-    if (!gs) return std::unexpected(gs.error());
-    return std::make_unique<BackedDhtGroups>
-        ( std::move(*gs)
-        , std::move(fallback_groups));
+ouinet::load_backed_dht_groups(fs::path root_dir,
+                               std::unique_ptr<BaseDhtGroups> fallback_groups,
+                               Async yield) {
+  auto gs = DhtGroupsImpl::load_trusted(std::move(root_dir), yield);
+  if (!gs)
+    return std::unexpected(gs.error());
+  return std::make_unique<BackedDhtGroups>(std::move(*gs),
+                                           std::move(fallback_groups));
 }

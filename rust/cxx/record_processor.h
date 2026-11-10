@@ -1,17 +1,17 @@
 #pragma once
 
+#include "cxx/async_callback.h"
+#include "util/executor.h"
 #include <boost/asio/spawn.hpp>
 #include <string>
-#include <vector>
 #include <string_view>
-#include "util/executor.h"
-#include "cxx/async_callback.h"
+#include <vector>
 
 // Forward declarations for bridge.rs.h
 namespace ouinet::metrics::bridge {
-    struct CxxRecordProcessor;
-    struct CxxOneShotSender;
-}
+struct CxxRecordProcessor;
+struct CxxOneShotSender;
+} // namespace ouinet::metrics::bridge
 
 #include "ouinet-rs/src/metrics/bridge.rs.h"
 #include "rust/cxx.h"
@@ -19,19 +19,17 @@ namespace ouinet::metrics::bridge {
 namespace ouinet::metrics::bridge {
 
 struct CxxRecordProcessor {
-    util::AsioExecutor executor;
+  util::AsioExecutor executor;
 
-    // Function provided by the user to process the record.
-    AsyncCallback async_callback;
+  // Function provided by the user to process the record.
+  AsyncCallback async_callback;
 
-    CxxRecordProcessor(util::AsioExecutor executor, AsyncCallback async_callback)
-        : executor(std::move(executor))
-        , async_callback(std::move(async_callback)) {}
+  CxxRecordProcessor(util::AsioExecutor executor, AsyncCallback async_callback)
+      : executor(std::move(executor)),
+        async_callback(std::move(async_callback)) {}
 
-    void execute( rust::String record_name
-                , rust::Vec<rust::u8> record_content
-                , rust::Box<bridge::CxxOneShotSender> on_finish) const;
+  void execute(rust::String record_name, rust::Vec<rust::u8> record_content,
+               rust::Box<bridge::CxxOneShotSender> on_finish) const;
 };
 
-
-} // namespace
+} // namespace ouinet::metrics::bridge

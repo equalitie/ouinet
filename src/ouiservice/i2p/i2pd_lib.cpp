@@ -1,5 +1,5 @@
-#include "i2pd.h"
 #include "ClientContext.h"
+#include "i2pd.h"
 #include "logger.h"
 #include "util/trace.h"
 
@@ -15,77 +15,67 @@ namespace ouinet {
 bool I2pd::is_start_lib_implemented() { return true; }
 
 struct OuiDaemon : public i2p::util::Daemon_Singleton {
-    static OuiDaemon& instance() {
-        static OuiDaemon d;
-        return d;
-    }
+  static OuiDaemon &instance() {
+    static OuiDaemon d;
+    return d;
+  }
 };
 
 struct I2pd::InnerLib : I2pd::InnerBase {
-    asio::ip::tcp::endpoint sam_ep;
-    Trace trace;
+  asio::ip::tcp::endpoint sam_ep;
+  Trace trace;
 
-    InnerLib(asio::ip::tcp::endpoint sam_ep, Trace trace):
-        sam_ep(sam_ep),
-        trace(std::move(trace))
-    {}
+  InnerLib(asio::ip::tcp::endpoint sam_ep, Trace trace)
+      : sam_ep(sam_ep), trace(std::move(trace)) {}
 
-    asio::ip::tcp::endpoint sam_endpoint() const override {
-        return sam_ep;
-    }
+  asio::ip::tcp::endpoint sam_endpoint() const override { return sam_ep; }
 
-    ~InnerLib() {
-        OUI_LOG_DEBUG(trace, " Stopping I2P daemon");
-        OuiDaemon::instance().stop();
-    }
+  ~InnerLib() {
+    OUI_LOG_DEBUG(trace, " Stopping I2P daemon");
+    OuiDaemon::instance().stop();
+  }
 };
 
-std::expected<I2pd, sys::error_code>
-I2pd::start_lib(I2pd::Config config, Trace trace) {
-    OUI_LOG_DEBUG(trace, " Starting I2P daemon (library)");
+std::expected<I2pd, sys::error_code> I2pd::start_lib(I2pd::Config config,
+                                                     Trace trace) {
+  OUI_LOG_DEBUG(trace, " Starting I2P daemon (library)");
 
-    auto config_vec = config.to_vector(I2pd::Type::Lib{});
+  auto config_vec = config.to_vector(I2pd::Type::Lib{});
 
-    std::vector<const char*> args;
+  std::vector<const char *> args;
 
-    args.push_back("i2pd");
+  args.push_back("i2pd");
 
-    std::transform(
-            config_vec.begin(),
-            config_vec.end(),
-            std::back_inserter(args),
-            [] (const std::string& str) { return str.c_str(); });
+  std::transform(config_vec.begin(), config_vec.end(), std::back_inserter(args),
+                 [](const std::string &str) { return str.c_str(); });
 
-    if (!OuiDaemon::instance().init(args.size(), (char**) args.data())) {
-        OUI_LOG_WARN(trace, " Failed to initialize I2P daemon");
-        return std::unexpected(asio::error::fault);
-    }
+  if (!OuiDaemon::instance().init(args.size(), (char **)args.data())) {
+    OUI_LOG_WARN(trace, " Failed to initialize I2P daemon");
+    return std::unexpected(asio::error::fault);
+  }
 
-    if (!OuiDaemon::instance().start()) {
-        OUI_LOG_WARN(trace, " Failed to start I2P daemon");
-        OuiDaemon::instance().stop();
-        return std::unexpected(asio::error::fault);
-    }
+  if (!OuiDaemon::instance().start()) {
+    OUI_LOG_WARN(trace, " Failed to start I2P daemon");
+    OuiDaemon::instance().stop();
+    return std::unexpected(asio::error::fault);
+  }
 
-    auto sam_bridge = i2p::client::context.GetSAMBridge();
+  auto sam_bridge = i2p::client::context.GetSAMBridge();
 
-    if (!sam_bridge) {
-        OUI_LOG_WARN(trace, " Failed to obtain SAMBridge");
-        return std::unexpected(asio::error::fault);
-    }
+  if (!sam_bridge) {
+    OUI_LOG_WARN(trace, " Failed to obtain SAMBridge");
+    return std::unexpected(asio::error::fault);
+  }
 
-    sys::error_code ec;
-    auto ep = sam_bridge->GetAcceptorEndpoint(ec);
+  sys::error_code ec;
+  auto ep = sam_bridge->GetAcceptorEndpoint(ec);
 
-    if (ec) {
-        OUI_LOG_WARN(trace, " Failed to obtain endpoint of SAMBridge: ", ec);
-        return std::unexpected(ec);
-    }
+  if (ec) {
+    OUI_LOG_WARN(trace, " Failed to obtain endpoint of SAMBridge: ", ec);
+    return std::unexpected(ec);
+  }
 
-    return I2pd(std::make_unique<InnerLib>(
-        ep,
-        trace
-    ));
+  return I2pd(std::make_unique<InnerLib>(ep, trace));
 }
 
-} // namespace
+} // namespace ouinet

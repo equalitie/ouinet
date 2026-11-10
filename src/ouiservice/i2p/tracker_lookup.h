@@ -1,31 +1,34 @@
 #pragma once
 
 #include "address.h"
-#include "tracker.h"
 #include "api.h"
+#include "tracker.h"
 
 namespace ouinet {
 
 class Async;
 class I2pTrackerClient;
 
-namespace bittorrent { struct NodeID; }
+namespace bittorrent {
+struct NodeID;
+}
 
 class I2pTrackerLookup {
 private:
-    struct Inner;
+  struct Inner;
 
 public:
-    using Error = I2pTrackerClient::Error::GetPeers;
+  using Error = I2pTrackerClient::Error::GetPeers;
 
-    I2pTrackerLookup(std::shared_ptr<I2pTrackerClient>, const bittorrent::NodeID&);
+  I2pTrackerLookup(std::shared_ptr<I2pTrackerClient>,
+                   const bittorrent::NodeID &);
 
-    std::expected<std::set<I2pAddress>, Error> get(Async);
+  std::expected<std::set<I2pAddress>, Error> get(Async);
 
-    const bittorrent::NodeID& infohash() const;
+  const bittorrent::NodeID &infohash() const;
 
 private:
-    std::shared_ptr<Inner> _inner;
+  std::shared_ptr<Inner> _inner;
 };
 
-} // namespace
+} // namespace ouinet

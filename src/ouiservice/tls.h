@@ -1,11 +1,11 @@
 #pragma once
 
-#include <boost/asio/ssl.hpp>
 #include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/ssl.hpp>
 
 #include "../ouiservice.h"
-#include "../util/cancel.h"
 #include "../util/async.h"
+#include "../util/cancel.h"
 #include "api.h"
 
 namespace ouinet {
@@ -13,58 +13,51 @@ namespace ouinet {
 namespace ouiservice {
 
 // Wraps TLS over an existing service.
-class OUINET_COMMON_API TlsOuiServiceServer : public OuiServiceImplementationServer
-{
-    public:
-    using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
+class OUINET_COMMON_API TlsOuiServiceServer
+    : public OuiServiceImplementationServer {
+public:
+  using BaseServicePtr = std::unique_ptr<OuiServiceImplementationServer>;
 
-    TlsOuiServiceServer( asio::any_io_executor ex
-                       , BaseServicePtr base
-                       , asio::ssl::context& context)
-        : _ex(std::move(ex))
-        , _base(std::move(base))
-        , _ssl_context(context)
-        , _accept_queue(_ex, 256)
-    {};
+  TlsOuiServiceServer(asio::any_io_executor ex, BaseServicePtr base,
+                      asio::ssl::context &context)
+      : _ex(std::move(ex)), _base(std::move(base)), _ssl_context(context),
+        _accept_queue(_ex, 256) {};
 
-    [[nodiscard]]
-    sys::error_code start_listen(Async) override;
-    void stop_listen() override;
+  [[nodiscard]]
+  sys::error_code start_listen(Async) override;
+  void stop_listen() override;
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> accept(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> accept(Async) override;
 
-    ~TlsOuiServiceServer();
+  ~TlsOuiServiceServer();
 
-    private:
-    AsioExecutor _ex;
-    BaseServicePtr _base;
-    asio::ssl::context& _ssl_context;
-    Cancel _cancel;
-    asio::experimental::channel<void(sys::error_code, GenericStream)> _accept_queue;
+private:
+  AsioExecutor _ex;
+  BaseServicePtr _base;
+  asio::ssl::context &_ssl_context;
+  Cancel _cancel;
+  asio::experimental::channel<void(sys::error_code, GenericStream)>
+      _accept_queue;
 };
 
-class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceClient
-{
-    public:
-    using BaseServicePtr = std::unique_ptr<OuiServiceClient>;
+class OUINET_COMMON_API TlsOuiServiceClient : public OuiServiceClient {
+public:
+  using BaseServicePtr = std::unique_ptr<OuiServiceClient>;
 
-    public:
-    TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context& context):
-        _base(std::move(base_)), _ssl_context(context)
-    {};
+public:
+  TlsOuiServiceClient(BaseServicePtr base_, asio::ssl::context &context)
+      : _base(std::move(base_)), _ssl_context(context) {};
 
-    sys::error_code start(Async yield) override {
-        return _base->start(yield);
-    }
+  sys::error_code start(Async yield) override { return _base->start(yield); }
 
-    [[nodiscard]]
-    std::expected<GenericStream, sys::error_code> connect(Async) override;
+  [[nodiscard]]
+  std::expected<GenericStream, sys::error_code> connect(Async) override;
 
-    private:
-    BaseServicePtr _base;
-    asio::ssl::context& _ssl_context;
+private:
+  BaseServicePtr _base;
+  asio::ssl::context &_ssl_context;
 };
 
-} // ouiservice namespace
-} // ouinet namespace
+} // namespace ouiservice
+} // namespace ouinet

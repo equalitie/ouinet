@@ -1,19 +1,19 @@
 #pragma once
 
-#include <functional>
-#include <expected>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/system.hpp>
+#include <expected>
+#include <functional>
 
 // Forward declarations for dns.rs.h
 namespace ouinet::dns::bridge {
-    class BasicCompleter;
+class BasicCompleter;
 }
 
 namespace ouinet {
-    class Async;
+class Async;
 }
 
 #include "ouinet-rs/src/dns.rs.h"
@@ -24,49 +24,47 @@ using bridge::Config;
 using bridge::Error;
 using TcpLookup = boost::asio::ip::tcp::resolver::results_type;
 
-
 /// A DNS resolver
 class Resolver {
 public:
-    using Output = std::vector<boost::asio::ip::address>;
+  using Output = std::vector<boost::asio::ip::address>;
 
-    Resolver();
-    Resolver(const Config& config);
+  Resolver();
+  Resolver(const Config &config);
 
-    Resolver(const Resolver&) = delete;
-    Resolver& operator=(const Resolver&) = delete;
+  Resolver(const Resolver &) = delete;
+  Resolver &operator=(const Resolver &) = delete;
 
-    Resolver(Resolver&&) = default;
-    Resolver& operator=(Resolver&&) = default;
+  Resolver(Resolver &&) = default;
+  Resolver &operator=(Resolver &&) = default;
 
-    static Config default_config();
+  static Config default_config();
 
-    static std::string protos_to_str(rust::Vec<bridge::Protocol> protos);
+  static std::string protos_to_str(rust::Vec<bridge::Protocol> protos);
 
-    /// Resolve the given DNS name.
-    [[nodiscard]]
-    std::expected<Output, boost::system::error_code> resolve(const std::string& name, Async);
+  /// Resolve the given DNS name.
+  [[nodiscard]]
+  std::expected<Output, boost::system::error_code>
+  resolve(const std::string &name, Async);
 
-    /// Resolve and return a TCP endpoint
-    [[nodiscard]]
-    std::expected<TcpLookup, boost::system::error_code>
-    resolve(const std::string& host, uint16_t port, Async);
+  /// Resolve and return a TCP endpoint
+  [[nodiscard]]
+  std::expected<TcpLookup, boost::system::error_code>
+  resolve(const std::string &host, uint16_t port, Async);
 
-
-    /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent lookups return with
-    /// a `NotFound` error.
-    void close();
+  /// Close this DNS resolver, cancelling any ongoing lookups. Any subsequent
+  /// lookups return with a `NotFound` error.
+  void close();
 
 private:
-
-    std::optional<rust::Box<bridge::Resolver>> _impl;
+  std::optional<rust::Box<bridge::Resolver>> _impl;
 };
 
 /// A category of DNS errors
 class ErrorCategory : public boost::system::error_category {
 public:
-    const char* name() const noexcept override;
-    std::string message(int ev) const override;
+  const char *name() const noexcept override;
+  std::string message(int ev) const override;
 };
 
 extern ErrorCategory error_category;
@@ -75,24 +73,24 @@ namespace bridge {
 
 class BasicCompleter {
 public:
-    explicit BasicCompleter(boost::asio::cancellation_slot&&);
+  explicit BasicCompleter(boost::asio::cancellation_slot &&);
 
-    virtual void complete(Error error_code, rust::Vec<IpAddress> addresses) = 0;
+  virtual void complete(Error error_code, rust::Vec<IpAddress> addresses) = 0;
 
-    void on_cancel(rust::Box<CancellationToken>);
+  void on_cancel(rust::Box<CancellationToken>);
 
-    virtual ~BasicCompleter() {};
+  virtual ~BasicCompleter() {};
 
 private:
-    boost::asio::cancellation_slot _cancellation_slot;
+  boost::asio::cancellation_slot _cancellation_slot;
 };
 
 inline boost::system::error_code make_error_code(Error error) noexcept {
-    if (error == Error::Cancelled) {
-        return boost::asio::error::operation_aborted;
-    } else {
-        return boost::system::error_code(static_cast<int>(error), error_category);
-    }
+  if (error == Error::Cancelled) {
+    return boost::asio::error::operation_aborted;
+  } else {
+    return boost::system::error_code(static_cast<int>(error), error_category);
+  }
 }
 
 } // namespace bridge
@@ -100,8 +98,7 @@ inline boost::system::error_code make_error_code(Error error) noexcept {
 } // namespace ouinet::dns
 
 namespace boost::system {
-template<>
-struct is_error_code_enum<ouinet::dns::bridge::Error> {
-    static const bool value = true;
+template <> struct is_error_code_enum<ouinet::dns::bridge::Error> {
+  static const bool value = true;
 };
-}
+} // namespace boost::system

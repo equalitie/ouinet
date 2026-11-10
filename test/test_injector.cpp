@@ -2,9 +2,9 @@
 #define BOOST_TEST_MODULE test_injector
 #include <boost/test/unit_test.hpp>
 
-#include "util/test_dir.h"
 #include "async_sleep.h"
 #include "injector.h"
+#include "util/test_dir.h"
 
 using namespace std;
 using namespace ouinet;
@@ -43,14 +43,13 @@ void run(asio::io_context &ctx, F &&async_test) {
   std::optional<steady_clock::time_point> spawn_end;
 
   asio::spawn(
-    ctx,
-    [&spawn_end, async_test = std::move(async_test)](
-  asio::yield_context yield) mutable {
-      async_test(Async(yield));
-      spawn_end = steady_clock::now();
-    },
-    check_exception
-  );
+      ctx,
+      [&spawn_end,
+       async_test = std::move(async_test)](asio::yield_context yield) mutable {
+        async_test(Async(yield));
+        spawn_end = steady_clock::now();
+      },
+      check_exception);
 
   ctx.run();
 }
@@ -62,40 +61,31 @@ void bep5_spam(const asio::yield_context &yield,
   udp_sock.open(udp::v4());
   Cancel cancel;
   for (auto i = 0; i < 100000; i++) {
-    std::ignore = udp_sock.send_to(
-      asio::buffer(msg.c_str(), msg.size()),
-      target_ep
-    );
+    std::ignore =
+        udp_sock.send_to(asio::buffer(msg.c_str(), msg.size()), target_ep);
     async_sleep(10us, cancel, yield);
   }
   udp_sock.close();
 }
 
-BOOST_AUTO_TEST_CASE(
-  test_injector_accept_dht_queries
-) {
+BOOST_AUTO_TEST_CASE(test_injector_accept_dht_queries) {
   asio::io_context ctx;
   run(ctx, [&ctx](Async yield) {
     auto exec = ctx.get_executor();
     const TestDir root;
-    udp::endpoint injector_ep{
-      address_v4::loopback(),
-      7085
-    };
+    udp::endpoint injector_ep{address_v4::loopback(), 7085};
 
     Injector injector(
-      make_config<InjectorConfig>({
-        "./no_injector_exec"s,
-        "--log-level=DEBUG",
-        "--repo"s, root.make_subdir("injector").string(),
-        "--listen-on-utp=0.0.0.0:"s + to_string(injector_ep.port()),
-        // TODO: bind to random port
-      }),
-      ctx
-    );
+        make_config<InjectorConfig>({
+            "./no_injector_exec"s, "--log-level=DEBUG", "--repo"s,
+            root.make_subdir("injector").string(),
+            "--listen-on-utp=0.0.0.0:"s + to_string(injector_ep.port()),
+            // TODO: bind to random port
+        }),
+        ctx);
 
     WaitCondition spam_sent{exec};
-    task::spawn_detached(exec, [&, lock=spam_sent.lock() ](auto y) {
+    task::spawn_detached(exec, [&, lock = spam_sent.lock()](auto y) {
       bep5_spam(y, injector_ep);
     });
     std::ignore = spam_sent.wait(yield);

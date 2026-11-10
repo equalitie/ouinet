@@ -18,7 +18,8 @@ namespace ouinet {
 //       },
 //       v);
 
-template<class... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
 
-} // namespace
+} // namespace ouinet

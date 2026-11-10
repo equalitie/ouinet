@@ -1,51 +1,44 @@
 #pragma once
 #include <cstdint>
 
+#include "../api.h"
+#include "../response_part.h"
 #include "../util/hash.h"
 #include "../util/sign.h"
-#include "../response_part.h"
-#include "../api.h"
 #include "signed_head.h"
 
 namespace ouinet {
-    class Async;
+class Async;
 }
 
 namespace ouinet::cache {
 
 struct OUINET_CLIENT_API HashList {
-    using Digest    = util::SHA512::digest_type;
-    using PubKey    = sign::PublicKey;
+  using Digest = util::SHA512::digest_type;
+  using PubKey = sign::PublicKey;
 
-    struct Block {
-        Digest data_hash;
-        sign::Signature chained_hash_signature;
-    };
+  struct Block {
+    Digest data_hash;
+    sign::Signature chained_hash_signature;
+  };
 
-    SignedHead         signed_head;
-    std::vector<Block> blocks;
+  SignedHead signed_head;
+  std::vector<Block> blocks;
 
-    bool verify() const;
+  bool verify() const;
 
-    static
-    std::expected<HashList, sys::error_code> load(
-        http_response::Reader&,
-        const PubKey&,
-        Async
-    );
+  static std::expected<HashList, sys::error_code> load(http_response::Reader &,
+                                                       const PubKey &, Async);
 
-    [[nodiscard]]
-    std::expected<void, sys::error_code>
-    write(GenericStream&, Async) const;
+  [[nodiscard]]
+  std::expected<void, sys::error_code> write(GenericStream &, Async) const;
 
-    boost::optional<Block> get_block(size_t block_id) const
-    {
-        if (block_id >= blocks.size()) {
-            return boost::none;
-        }
-        return blocks[block_id];
+  boost::optional<Block> get_block(size_t block_id) const {
+    if (block_id >= blocks.size()) {
+      return boost::none;
     }
-
+    return blocks[block_id];
+  }
 };
 
 } // namespace ouinet::cache

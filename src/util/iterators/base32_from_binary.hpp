@@ -3,7 +3,7 @@
 
 // MS compatible compilers support #pragma once
 #if defined(_MSC_VER)
-# pragma once
+#pragma once
 #endif
 
 /////////1/////////2/////////3/////////4/////////5/////////6/////////7/////////8
@@ -11,7 +11,7 @@
 
 // Adapted from Robert Ramsey's "base64_from_binary.hpp".
 
-// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com . 
+// (C) Copyright 2002 Robert Ramey - http://www.rrsd.com .
 // Use, modification and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -22,15 +22,15 @@
 
 #include <cstddef> // size_t
 #if defined(BOOST_NO_STDC_NAMESPACE)
-namespace std{ 
-    using ::size_t; 
+namespace std {
+using ::size_t;
 } // namespace std
 #endif
 
-#include <boost/iterator/transform_iterator.hpp>
 #include <boost/archive/iterators/dataflow_exception.hpp>
+#include <boost/iterator/transform_iterator.hpp>
 
-namespace boost { 
+namespace boost {
 namespace archive {
 namespace iterators {
 
@@ -39,16 +39,14 @@ namespace iterators {
 
 namespace detail {
 
-template<class CharType>
-struct from_5_bit {
-    typedef CharType result_type;
-    CharType operator()(CharType t) const{
-        static const char * lookup_table =
-            "abcdefghijklmnopqrstuvwxyz"
-            "234567";
-        BOOST_ASSERT(t < 32);
-        return lookup_table[static_cast<size_t>(t)];
-    }
+template <class CharType> struct from_5_bit {
+  typedef CharType result_type;
+  CharType operator()(CharType t) const {
+    static const char *lookup_table = "abcdefghijklmnopqrstuvwxyz"
+                                      "234567";
+    BOOST_ASSERT(t < 32);
+    return lookup_table[static_cast<size_t>(t)];
+  }
 };
 
 } // namespace detail
@@ -66,40 +64,24 @@ struct from_5_bit {
 // a templated constructor.  This makes it incompatible with the dataflow
 // ideal.  This is also addressed here.
 
-//template<class Base, class CharType = typename Base::value_type>
-template<
-    class Base, 
-    class CharType = typename boost::iterator_value<Base>::type
->
-class base32_from_binary : 
-    public transform_iterator<
-        detail::from_5_bit<CharType>,
-        Base
-    >
-{
-    friend class boost::iterator_core_access;
-    typedef transform_iterator<
-        typename detail::from_5_bit<CharType>,
-        Base
-    > super_t;
+// template<class Base, class CharType = typename Base::value_type>
+template <class Base,
+          class CharType = typename boost::iterator_value<Base>::type>
+class base32_from_binary
+    : public transform_iterator<detail::from_5_bit<CharType>, Base> {
+  friend class boost::iterator_core_access;
+  typedef transform_iterator<typename detail::from_5_bit<CharType>, Base>
+      super_t;
 
 public:
-    // make composible buy using templated constructor
-    template<class T>
-    base32_from_binary(T start) :
-        super_t(
-            Base(static_cast< T >(start)),
-            detail::from_5_bit<CharType>()
-        )
-    {}
-    // intel 7.1 doesn't like default copy constructor
-    base32_from_binary(const base32_from_binary & rhs) : 
-        super_t(
-            Base(rhs.base_reference()),
-            detail::from_5_bit<CharType>()
-        )
-    {}
-//    base32_from_binary(){};
+  // make composible buy using templated constructor
+  template <class T>
+  base32_from_binary(T start)
+      : super_t(Base(static_cast<T>(start)), detail::from_5_bit<CharType>()) {}
+  // intel 7.1 doesn't like default copy constructor
+  base32_from_binary(const base32_from_binary &rhs)
+      : super_t(Base(rhs.base_reference()), detail::from_5_bit<CharType>()) {}
+  //    base32_from_binary(){};
 };
 
 } // namespace iterators

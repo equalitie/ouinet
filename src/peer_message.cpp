@@ -1,147 +1,153 @@
-#include <boost/beast/http/empty_body.hpp>
-#include <boost/beast/core/flat_buffer.hpp>
-#include <boost/beast/http/read.hpp>
+#include "peer_message.h"
+#include "constants.h"
+#include "parse/number.h"
+#include "util/async.h"
+#include "util/keep_alive.h"
 #include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
-#include "peer_message.h"
-#include "util/keep_alive.h"
-#include "util/async.h"
-#include "parse/number.h"
-#include "constants.h"
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/http/empty_body.hpp>
+#include <boost/beast/http/read.hpp>
 
 namespace ouinet {
 
 std::expected<PeerRequest, sys::error_code>
-PeerRequest::async_read(GenericStream& con, Async yield) {
-    http::request<http::empty_body> req;
-    beast::flat_buffer con_rbuf;
+PeerRequest::async_read(GenericStream &con, Async yield) {
+  http::request<http::empty_body> req;
+  beast::flat_buffer con_rbuf;
 
-    auto read_r = http::async_read(con, con_rbuf, req, yield);
+  auto read_r = http::async_read(con, con_rbuf, req, yield);
 
-    if (!read_r.has_value()) {
-        return std::unexpected(read_r.error());
+  if (!read_r.has_value()) {
+    return std::unexpected(read_r.error());
+  }
+
+  sys::error_code ec;
+  if (con_rbuf.size() > 0)
+    con.put_back(con_rbuf.data(), ec);
+  if (ec)
+    return std::unexpected(ec);
+
+  http::verb method = req.method();
+
+  if (method != http::verb::get && method != http::verb::connect &&
+      method != http::verb::head && method != http::verb::propfind) {
+    return std::unexpected(make_error_code(PeerRequestError::invalid_method));
+  }
+
+  if (method == http::verb::connect) {
+    return PeerConnectRequest();
+  }
+
+  bool keep_alive = util::get_keep_alive(req);
+
+  auto protocol_version_sw = req[http_::protocol_version_hdr];
+  auto protocol_version = parse::number<uint16_t>(protocol_version_sw);
+
+  // TODO: Not being used at the moment, the old reasoning was that even if the
+  // version doesn't match ours we'd still serve the peer some content.
+  if (!protocol_version) {
+    return std::unexpected(
+        make_error_code(PeerRequestError::invalid_protocol_version));
+  }
+
+  auto resource_id = cache::ResourceId::from_hex(req.target());
+
+  if (!resource_id) {
+    return std::unexpected(make_error_code(PeerRequestError::invalid_target));
+  }
+
+  std::optional<util::HttpRequestByteRange> range;
+
+  {
+    auto ranges = util::HttpRequestByteRange::parse(req[http::field::range]);
+    if (ranges && ranges->size() == 1) {
+      if (ranges->size() == 1) {
+        range = (*ranges)[0];
+      } else {
+        // XXX: We currently support max 1 range in the request
+        return std::unexpected(
+            make_error_code(PeerRequestError::invalid_range));
+      }
     }
+  }
 
-    sys::error_code ec;
-    if (con_rbuf.size() > 0) con.put_back(con_rbuf.data(), ec);
-    if (ec) return std::unexpected(ec);
-
-    http::verb method = req.method();
-
-    if (method != http::verb::get &&
-            method != http::verb::connect &&
-            method != http::verb::head &&
-            method != http::verb::propfind) {
-        return std::unexpected(make_error_code(PeerRequestError::invalid_method));
-    }
-
-    if (method == http::verb::connect) {
-        return PeerConnectRequest();
-    }
-
-    bool keep_alive = util::get_keep_alive(req);
-
-    auto protocol_version_sw = req[http_::protocol_version_hdr];
-    auto protocol_version = parse::number<uint16_t>(protocol_version_sw);
-
-    // TODO: Not being used at the moment, the old reasoning was that even if the
-    // version doesn't match ours we'd still serve the peer some content.
-    if (!protocol_version) {
-        return std::unexpected(make_error_code(PeerRequestError::invalid_protocol_version));
-    }
-
-    auto resource_id = cache::ResourceId::from_hex(req.target());
-
-    if (!resource_id) {
-        return std::unexpected(make_error_code(PeerRequestError::invalid_target));
-    }
-
-    std::optional<util::HttpRequestByteRange> range;
-
-    {
-        auto ranges = util::HttpRequestByteRange::parse(req[http::field::range]);
-        if (ranges && ranges->size() == 1) {
-            if (ranges->size() == 1) {
-                range = (*ranges)[0];
-            } else {
-                // XXX: We currently support max 1 range in the request
-                return std::unexpected(make_error_code(PeerRequestError::invalid_range));
-            }
-        }
-    }
-
-    return PeerCacheRequest{
-        //std::move(req),
-        method,
-        keep_alive,
-        std::move(*resource_id),
-        std::move(range)
-    };
+  return PeerCacheRequest{// std::move(req),
+                          method, keep_alive, std::move(*resource_id),
+                          std::move(range)};
 }
 
 std::expected<void, sys::error_code>
-async_write_blob_type(BlobType blob_type, GenericStream& con, Async yield) {
-    uint8_t is_cyphertext = blob_type == BlobType::cypher_text ? 1 : 0;
-    auto r = asio::async_write(con, asio::buffer(&is_cyphertext, 1), yield);
-    if (!r) return std::unexpected(r.error());
-    return {};
+async_write_blob_type(BlobType blob_type, GenericStream &con, Async yield) {
+  uint8_t is_cyphertext = blob_type == BlobType::cypher_text ? 1 : 0;
+  auto r = asio::async_write(con, asio::buffer(&is_cyphertext, 1), yield);
+  if (!r)
+    return std::unexpected(r.error());
+  return {};
 }
 
 std::expected<BlobType, sys::error_code>
-async_read_blob_type(GenericStream& con, Async yield) {
-    uint8_t is_cyphertext = -1;
+async_read_blob_type(GenericStream &con, Async yield) {
+  uint8_t is_cyphertext = -1;
 
-    auto e = asio::async_read(con, asio::buffer(&is_cyphertext, 1), yield);
-    if (!e) {
-        return std::unexpected(e.error());
-    }
+  auto e = asio::async_read(con, asio::buffer(&is_cyphertext, 1), yield);
+  if (!e) {
+    return std::unexpected(e.error());
+  }
 
-    switch (is_cyphertext) {
-        case 0: return BlobType::plain_text;
-        case 1: return BlobType::cypher_text;
-        default: return std::unexpected(make_error_code(PeerRequestError::invalid_blob_type));
-    }
+  switch (is_cyphertext) {
+  case 0:
+    return BlobType::plain_text;
+  case 1:
+    return BlobType::cypher_text;
+  default:
+    return std::unexpected(
+        make_error_code(PeerRequestError::invalid_blob_type));
+  }
 }
 
-void PeerCacheRequest::print(std::ostream& os) const {
-    os << "PeerCacheRequest\n";
-    os << "  method:      " << _method << "\n";
-    os << "  keep_alive:  " << _keep_alive << "\n";
-    os << "  resource_id: " << _resource_id << "\n";
-    if (_range) {
-        os << "  range:       " << *_range << "\n";
-    }
+void PeerCacheRequest::print(std::ostream &os) const {
+  os << "PeerCacheRequest\n";
+  os << "  method:      " << _method << "\n";
+  os << "  keep_alive:  " << _keep_alive << "\n";
+  os << "  resource_id: " << _resource_id << "\n";
+  if (_range) {
+    os << "  range:       " << *_range << "\n";
+  }
 }
 
-class PeerRequestErrorCategory: public sys::error_category {
+class PeerRequestErrorCategory : public sys::error_category {
 public:
-    const char* name() const noexcept {
-        return "peer request error";
+  const char *name() const noexcept { return "peer request error"; }
+
+  std::string message(int ev) const {
+    char buffer[64];
+    return this->message(ev, buffer, sizeof(buffer));
+  }
+
+  char const *message(int ev, char *buffer, std::size_t len) const noexcept {
+    switch (static_cast<PeerRequestError>(ev)) {
+    case PeerRequestError::success:
+      return "no error";
+    case PeerRequestError::invalid_method:
+      return "invalid method";
+    case PeerRequestError::invalid_protocol_version:
+      return "invalid protocol version";
+    case PeerRequestError::invalid_target:
+      return "invalid target (ResourceId)";
+    case PeerRequestError::invalid_range:
+      return "invalid range";
+    case PeerRequestError::invalid_blob_type:
+      return "invalid blob type";
     }
 
-    std::string message( int ev ) const {
-        char buffer[ 64 ];
-        return this->message( ev, buffer, sizeof(buffer));
-    }
-
-    char const* message(int ev, char * buffer, std::size_t len) const noexcept {
-        switch(static_cast<PeerRequestError>(ev))
-        {
-            case PeerRequestError::success: return "no error";
-            case PeerRequestError::invalid_method: return "invalid method";
-            case PeerRequestError::invalid_protocol_version: return "invalid protocol version";
-            case PeerRequestError::invalid_target: return "invalid target (ResourceId)";
-            case PeerRequestError::invalid_range: return "invalid range";
-            case PeerRequestError::invalid_blob_type: return "invalid blob type";
-        }
-
-        std::snprintf(buffer, len, "Unknown error %d", ev );
-        return buffer;
-    }
+    std::snprintf(buffer, len, "Unknown error %d", ev);
+    return buffer;
+  }
 };
 
-sys::error_category const& peer_request_error_category() {
-    static const PeerRequestErrorCategory instance;
-    return instance;
+sys::error_category const &peer_request_error_category() {
+  static const PeerRequestErrorCategory instance;
+  return instance;
 }
 } // namespace ouinet

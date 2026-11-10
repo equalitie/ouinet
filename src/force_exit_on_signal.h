@@ -1,8 +1,8 @@
 #pragma once
 
-#include <thread>
-#include <boost/asio/signal_set.hpp>
 #include "namespaces.h"
+#include <boost/asio/signal_set.hpp>
+#include <thread>
 
 namespace ouinet {
 
@@ -13,24 +13,22 @@ namespace ouinet {
 // separate thread so that it doesn't block the rest of the app.
 class ForceExitOnSignal {
 public:
-    ForceExitOnSignal()
-    {
-        _thread = std::thread([this] {
-            asio::signal_set signals(_ctx, SIGINT, SIGTERM);
-            signals.async_wait([] (const sys::error_code&, int) { exit(1); });
-            _ctx.run();
-        });
-    }
+  ForceExitOnSignal() {
+    _thread = std::thread([this] {
+      asio::signal_set signals(_ctx, SIGINT, SIGTERM);
+      signals.async_wait([](const sys::error_code &, int) { exit(1); });
+      _ctx.run();
+    });
+  }
 
-    ~ForceExitOnSignal()
-    {
-        _ctx.stop();
-        _thread.join();
-    }
+  ~ForceExitOnSignal() {
+    _ctx.stop();
+    _thread.join();
+  }
 
 private:
-    asio::io_context _ctx;
-    std::thread _thread;
+  asio::io_context _ctx;
+  std::thread _thread;
 };
 
-} // ouinet namespace
+} // namespace ouinet
