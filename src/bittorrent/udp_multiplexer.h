@@ -15,6 +15,12 @@
 namespace ouinet {
 namespace bittorrent {
 
+/*
+ * `tx_rate_limit` is set by default for TX to 500K bits/sec.
+ * TODO: Expose it as a config value named `udp-mux-tx-limit`
+ */
+constexpr auto tx_limit = static_cast<float>(500 * 1000) / 8;
+
 class RateLimiter {
 public:
   RateLimiter(const AsioExecutor &, RateCounter &, uint32_t limit);
@@ -87,9 +93,9 @@ private:
   ConditionVariable _send_queue_nonempty;
   IntrusiveList<RecvEntry> _receive_queue;
   Cancel _terminate_signal;
-  asio::steady_timer _tx_rate_limiting_timer;
   RateCounter _rc_rx;
   RateCounter _rc_tx;
+  RateLimiter _tx_rate_limiter;
   RateLimiter _rx_rate_limiter;
   float sent = 0;
   float recv = 0;
@@ -98,7 +104,7 @@ private:
 inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
                                       const uint32_t rx_limit = 0)
     : _socket(std::move(s)), _send_queue_nonempty(_socket.get_executor()),
-      _tx_rate_limiting_timer(_socket.get_executor()),
+      _tx_rate_limiter(_socket.get_executor(), _rc_tx, tx_limit),
       _rx_rate_limiter(_socket.get_executor(), _rc_rx, rx_limit) {
   assert(_socket.is_open());
 
@@ -146,8 +152,6 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
 
     auto terminated = cancel.connect([&] { _send_queue_nonempty.notify(); });
 
-    const float max_rate = (500 * 1000) / 8; // 500K bits/sec
-
     while (true) {
       if (terminated) {
         break;
@@ -171,8 +175,7 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
       if (!ec) {
         sent += entry->message.size();
         _rc_tx.update(entry->message.size());
-        maintain_max_rate_bytes_per_sec(_rc_tx.rate(), max_rate,
-                                        _tx_rate_limiting_timer, yield[ec]);
+        _tx_rate_limiter.maintain_max_rate_bytes_per_sec(yield[ec]);
         if (terminated)
           break;
       }
