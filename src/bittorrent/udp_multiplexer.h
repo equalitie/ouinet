@@ -87,11 +87,11 @@ private:
   ConditionVariable _send_queue_nonempty;
   IntrusiveList<RecvEntry> _receive_queue;
   Cancel _terminate_signal;
-  asio::steady_timer _rx_rate_limiting_timer;
   asio::steady_timer _tx_rate_limiting_timer;
   RateCounter _rc_rx;
   RateCounter _rc_tx;
   uint32_t _rx_limit;
+  RateLimiter _rx_rate_limiter;
   float sent = 0;
   float recv = 0;
 };
@@ -99,8 +99,8 @@ private:
 inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
                                       const uint32_t rx_limit = 0)
     : _socket(std::move(s)), _send_queue_nonempty(_socket.get_executor()),
-      _rx_rate_limiting_timer(_socket.get_executor()),
-      _tx_rate_limiting_timer(_socket.get_executor()), _rx_limit(rx_limit) {
+      _tx_rate_limiting_timer(_socket.get_executor()), _rx_limit(rx_limit),
+      _rx_rate_limiter(_socket.get_executor(), _rc_rx, _rx_limit) {
   assert(_socket.is_open());
 
 #if 0
@@ -204,8 +204,7 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
       _rc_rx.update(size);
       recv += size;
       if (_rx_limit > 0) {
-        maintain_max_rate_bytes_per_sec(_rc_rx.rate(), _rx_limit,
-                                        _rx_rate_limiting_timer, yield[ec]);
+        _rx_rate_limiter.maintain_max_rate_bytes_per_sec(yield[ec]);
         if (terminated)
           return;
       }
