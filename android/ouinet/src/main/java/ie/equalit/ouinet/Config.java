@@ -462,18 +462,6 @@ public class Config implements Parcelable {
             stream.close();
         }
 
-        private boolean copyExecutableToFile(String asset, String path) {
-            if (!copyAssetToFile(asset, path)) {
-                return false;
-            }
-            File executable = new File(path);
-            if (!executable.setExecutable(true)) {
-                Log.d(TAG, "Failed to set executable for file: " + path);
-                return false;
-            }
-            return true;
-        }
-
         private String getOuinetDirectory() {
             return context.getFilesDir().getAbsolutePath() + OUINET_DIR;
         }
