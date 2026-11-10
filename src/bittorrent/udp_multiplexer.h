@@ -15,6 +15,17 @@
 namespace ouinet {
 namespace bittorrent {
 
+class RateLimiter {
+public:
+  RateLimiter(const AsioExecutor &, RateCounter &, uint32_t limit);
+  inline void maintain_max_rate_bytes_per_sec(asio::yield_context);
+
+private:
+  RateCounter &_counter;
+  asio::steady_timer _timer;
+  uint32_t _limit;
+};
+
 class UdpMultiplexer {
 private:
   using udp = asio::ip::udp;
@@ -292,6 +303,25 @@ UdpMultiplexer::receive(udp::endpoint &from, Cancel &cancel,
 
 inline AsioExecutor UdpMultiplexer::get_executor() {
   return _socket.get_executor();
+}
+
+inline RateLimiter::RateLimiter(const AsioExecutor &executor,
+                                RateCounter &counter, const uint32_t limit)
+    : _counter(counter), _timer(executor), _limit(limit) {}
+
+inline void
+RateLimiter::maintain_max_rate_bytes_per_sec(asio::yield_context yield) {
+  const auto current_rate = _counter.rate();
+  const auto max_rate = static_cast<float>(_limit);
+  if (current_rate <= max_rate)
+    return;
+
+  const float delay_sec = current_rate / max_rate - 1;
+  const auto delay =
+      std::chrono::milliseconds(static_cast<int>(delay_sec * 1000));
+
+  _timer.expires_after(delay);
+  _timer.async_wait(yield);
 }
 
 } // namespace bittorrent
