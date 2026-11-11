@@ -79,10 +79,6 @@ public:
   asio_utp::udp_multiplexer inner_udp_multiplexer() const { return _socket; }
 
 private:
-  void maintain_max_rate_bytes_per_sec(float current_rate, float max_rate,
-                                       asio::steady_timer &rate_limiting_timer,
-                                       asio::yield_context);
-
   static boost::asio::const_buffer buffer(const std::string &s) {
     return boost::asio::buffer(const_cast<const char *>(s.data()), s.size());
   }
@@ -214,19 +210,6 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
       }
     }
   });
-}
-
-inline void UdpMultiplexer::maintain_max_rate_bytes_per_sec(
-    float current_rate, float max_rate, asio::steady_timer &rate_limiting_timer,
-    asio::yield_context yield) {
-  if (current_rate <= max_rate)
-    return;
-
-  float delay_sec = current_rate / max_rate - 1;
-  auto delay = std::chrono::milliseconds(int(delay_sec * 1000));
-
-  rate_limiting_timer.expires_after(delay);
-  rate_limiting_timer.async_wait(yield);
 }
 
 inline UdpMultiplexer::~UdpMultiplexer() {
