@@ -1,11 +1,12 @@
 #include "task.h"
 #include "logger.h"
 #include "util/async.h"
+#include "util/debug.h"
 #include <source_location>
 
 namespace ouinet::task {
 
-void handle_exception_ptr(std::exception_ptr e, std::source_location location) {
+void handle_exception_ptr(std::exception_ptr e, std::source_location location, std::optional<Trace> trace) {
   try {
     if (e)
       std::rethrow_exception(e);
@@ -13,11 +14,11 @@ void handle_exception_ptr(std::exception_ptr e, std::source_location location) {
     // do nothing
   } catch (const std::exception &e) {
     LOG_ERROR("Unhandled exception in coroutine in ", location.file_name(), ":",
-              location.line(), ":", location.column(), ": ", e.what());
+              location.line(), ":", location.column(), ": ", e.what(), " (trace: ", debug(trace), ")");
     throw;
   } catch (...) {
     LOG_ERROR("Unhandled exception in coroutine in ", location.file_name(), ":",
-              location.line(), ":", location.column(), ": unknown");
+              location.line(), ":", location.column(), ": unknown (trace: ", debug(trace), ")");
     throw;
   }
 }
