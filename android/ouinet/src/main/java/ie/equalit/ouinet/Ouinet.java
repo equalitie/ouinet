@@ -11,7 +11,6 @@ import android.os.Build;
 import androidx.annotation.Nullable;
 import android.util.Log;
 
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,10 +23,6 @@ public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
-        System.loadLibrary("c++_shared");
-        System.loadLibrary("ouinet_asio");
-        System.loadLibrary("asio_utp");
-        System.loadLibrary("ouinet_common");
         System.loadLibrary("ouinet_client");
         System.loadLibrary("native-lib");
         libsLoaded = true;
