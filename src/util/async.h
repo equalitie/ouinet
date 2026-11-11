@@ -168,8 +168,7 @@ void spawn_detached(
                        detail::make_coroutine(std::forward<Function>(func),
                                               std::move(cancel),
                                               std::move(trace)),
-                       std::move(trace_ex),
-                       std::move(location));
+                       std::move(trace_ex), std::move(location));
 }
 
 /// Spawns a top-level coroutine
@@ -181,8 +180,7 @@ void spawn_detached(
   task::spawn_detached(exec,
                        detail::make_coroutine(std::forward<Function>(func),
                                               std::move(cancel), Trace()),
-                       {},
-                       std::move(location));
+                       {}, std::move(location));
 }
 
 /// Spawns a top-level coroutine
@@ -195,8 +193,7 @@ void spawn_detached(
   task::spawn_detached(exec,
                        detail::make_coroutine(std::forward<Function>(func),
                                               Cancel(), std::move(trace)),
-                       std::move(trace_ex),
-                       std::move(location));
+                       std::move(trace_ex), std::move(location));
 }
 
 /// Spawns a top-level coroutine
