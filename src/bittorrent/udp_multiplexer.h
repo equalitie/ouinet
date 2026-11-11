@@ -172,7 +172,7 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
         sent += entry->message.size();
         _rc_tx.update(entry->message.size());
         _tx_rate_limiter.maintain_max_rate_bytes_per_sec(yield[ec]);
-        if (terminated)
+        if (ec || terminated)
           break;
       }
 
@@ -202,7 +202,7 @@ inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
       _rc_rx.update(size);
       recv += size;
       _rx_rate_limiter.maintain_max_rate_bytes_per_sec(yield[ec]);
-      if (terminated)
+      if (ec || terminated)
         return;
 
       for (auto &entry : std::move(_receive_queue)) {
