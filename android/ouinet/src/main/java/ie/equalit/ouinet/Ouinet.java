@@ -24,12 +24,12 @@ public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
-        System.loadLibrary("asio_utp");
         System.loadLibrary("c++_shared");
-        System.loadLibrary("native-lib");
         System.loadLibrary("ouinet_asio");
-        System.loadLibrary("ouinet_client");
+        System.loadLibrary("asio_utp");
         System.loadLibrary("ouinet_common");
+        System.loadLibrary("ouinet_client");
+        System.loadLibrary("native-lib");
         libsLoaded = true;
     }
 
