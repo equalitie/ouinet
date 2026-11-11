@@ -78,7 +78,8 @@ public:
         [lambda = std::move(lambda), cancel = std::move(cancel),
          trace = _trace](asio::yield_context yield) mutable {
           lambda(Async(yield, std::move(cancel), std::move(trace)));
-        });
+        },
+        _trace);
   }
 
   void spawn(auto lambda) { spawn(_cancel, std::move(lambda)); }
@@ -162,10 +163,12 @@ void spawn_detached(
     const boost::asio::any_io_executor &exec, Cancel cancel, Trace trace,
     Function &&func,
     std::source_location location = std::source_location::current()) {
+  auto trace_ex = trace;
   task::spawn_detached(exec,
                        detail::make_coroutine(std::forward<Function>(func),
                                               std::move(cancel),
                                               std::move(trace)),
+                       std::move(trace_ex),
                        std::move(location));
 }
 
@@ -178,6 +181,7 @@ void spawn_detached(
   task::spawn_detached(exec,
                        detail::make_coroutine(std::forward<Function>(func),
                                               std::move(cancel), Trace()),
+                       {},
                        std::move(location));
 }
 
@@ -187,9 +191,11 @@ template <typename Function>
 void spawn_detached(
     const boost::asio::any_io_executor &exec, Trace trace, Function &&func,
     std::source_location location = std::source_location::current()) {
+  auto trace_ex = trace;
   task::spawn_detached(exec,
                        detail::make_coroutine(std::forward<Function>(func),
                                               Cancel(), std::move(trace)),
+                       std::move(trace_ex),
                        std::move(location));
 }
 
