@@ -23,13 +23,14 @@ constexpr auto tx_limit = static_cast<float>(500 * 1000) / 8;
 
 class RateLimiter {
 public:
-  RateLimiter(const AsioExecutor &, RateCounter &, uint32_t limit);
+  RateLimiter(const AsioExecutor &, RateCounter &, uint32_t limit, Cancel);
   inline void maintain_max_rate_bytes_per_sec(asio::yield_context);
 
 private:
   RateCounter &_counter;
   asio::steady_timer _timer;
   uint32_t _limit;
+  Cancel _cancel;
 };
 
 class UdpMultiplexer {
@@ -100,8 +101,10 @@ private:
 inline UdpMultiplexer::UdpMultiplexer(asio_utp::udp_multiplexer &&s,
                                       const uint32_t rx_limit = 0)
     : _socket(std::move(s)), _send_queue_nonempty(_socket.get_executor()),
-      _tx_rate_limiter(_socket.get_executor(), _rc_tx, tx_limit),
-      _rx_rate_limiter(_socket.get_executor(), _rc_rx, rx_limit) {
+      _tx_rate_limiter(_socket.get_executor(), _rc_tx, tx_limit,
+                       _terminate_signal),
+      _rx_rate_limiter(_socket.get_executor(), _rc_rx, rx_limit,
+                       _terminate_signal) {
   assert(_socket.is_open());
 
 #if 0
@@ -288,11 +291,15 @@ inline AsioExecutor UdpMultiplexer::get_executor() {
 }
 
 inline RateLimiter::RateLimiter(const AsioExecutor &executor,
-                                RateCounter &counter, const uint32_t limit)
-    : _counter(counter), _timer(executor), _limit(limit) {}
+                                RateCounter &counter, const uint32_t limit,
+                                Cancel cancel)
+    : _counter(counter), _timer(executor), _limit(limit), _cancel(cancel) {}
 
 inline void
 RateLimiter::maintain_max_rate_bytes_per_sec(asio::yield_context yield) {
+  if (auto terminated = _cancel.connect([&] { _timer.cancel(); }))
+    return;
+
   const auto current_rate = _counter.rate();
   const auto max_rate = static_cast<float>(_limit);
   if (max_rate == 0 || current_rate <= max_rate)
