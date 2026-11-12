@@ -47,9 +47,10 @@ BOOST_DATA_TEST_CASE(test_rate_limiter,
   asio::io_context ctx;
   run(ctx, [exec = ctx.get_executor(), limit, expected_delay_ms,
             current](const Async &yield) {
+    Cancel cancel;
     RateCounter counter{};
     counter.update(current);
-    auto limiter = RateLimiter{exec, counter, limit};
+    auto limiter = RateLimiter{exec, counter, limit, cancel};
 
     auto start_time = steady_clock::now();
     limiter.maintain_max_rate_bytes_per_sec(yield.asio_yield());
