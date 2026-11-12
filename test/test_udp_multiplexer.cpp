@@ -88,13 +88,14 @@ BOOST_DATA_TEST_CASE(test_rate_limiter_cancellation,
     counter.update(current);
     auto limiter = RateLimiter{exec, counter, limit, cancel};
 
+    sys::error_code ec;
     const auto start_time = steady_clock::now();
-    limiter.maintain_max_rate_bytes_per_sec(yield.asio_yield());
+    limiter.maintain_max_rate_bytes_per_sec(yield.asio_yield()[ec]);
     const auto end_time = steady_clock::now();
 
     const auto elapsed_ms =
         duration_cast<milliseconds>(end_time - start_time).count();
-    BOOST_REQUIRE(cancel);
+    BOOST_REQUIRE_EQUAL(ec, sys::errc::operation_canceled);
     BOOST_REQUIRE_LT(elapsed_ms, expected_delay_ms);
   });
 }
