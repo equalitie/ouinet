@@ -104,29 +104,17 @@ SDK version:
 
 - The oldest platform supported by `android-ndk-r19b`, as installed by
   `build-android.sh`, is `android-16`.
-  However, no application that implements Ouinet supports an SDK lower than 21,
-  (e.g. see Ceno Browser [buildSrc/src/main/java/Config.kt](https://gitlab.com/ceno-app/ceno-browser/-/blob/main/buildSrc/src/main/java/Config.kt#L13)).
+
+However, one would need ReLinker to reliably load ouinet library with SDK < 23
+Repo: <https://github.com/KeepSafe/ReLinker>
+And ReLinker is no longer maintained and can cause issues with newer android.
 
 Thus:
 
 ```
 android { // ...
     defaultConfig { // ...
-        minSdkVersion 21 // ...
+        minSdkVersion 23 // ...
     } // ...
 }
 ```
-
-This may be lowered by using an older NDK, if it includes older platforms.
-However it may pose problems with applications having a higher minimum SDK.
-
-## Changes for 64-bit builds
-
-Since support for 64-bit architectures was added in Android SDK/API 21, 64-bit
-builds raise the minimum SDK version to 21.  `build-android.sh` takes care of
-setting the appropriate value of `OUINET_MIN_API` in this case.
-
-The same will happen for builds with targets compiled for different
-architectures in the same AAR, like `omni` that includes `armeabi-v7a`,
-`arm64-v8a` and `x86_64`). In this case, `build-android.sh` will adjust
-`OUINET_MIN_API` to 21 in order to keep compatibility with 64-bit libs.

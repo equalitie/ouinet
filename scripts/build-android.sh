@@ -8,9 +8,20 @@ SCRIPT_DIR=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 ROOT=$(cd ${SCRIPT_DIR}/.. && pwd)
 ABI=${ABI:-omni}
 
+# These envs need to be the same as jvm options in gradle.properties
+# Otherwise the process will need to be forked after spawning
+# to get a JVM with different options enabled
+# So, if they are not the same then --no-daemon will be ignored
+# https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon
+# HOWEVER if they are the same the --no-daemon can STILL be ignored somehow
+# It is ridiculous tbh
+export GRADLE_OPTS="-Xmx4096m -Dfile.encoding=UTF-8"
+export JAVA_OPTS=${GRADLE_OPTS}
+
 CMAKEARG_WITH_ASAN=${WITH_ASAN}
 CMAKEARG_WITH_OUISYNC=${WITH_OUISYNC}
 CMAKEARG_OUISYNC_SRC_DIR=${OUISYNC_SRC_DIR}
+CMAKEARG_WITH_I2PD=${WITH_I2PD}
 
 RELEASE_BUILD=0
 while getopts r option; do
@@ -53,7 +64,10 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
 PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
 
+# Only set ANDROID_HOME, having ANDROID_SDK_ROOT also set can produce a build error
+unset ANDROID_SDK_ROOT
 ANDROID_HOME=${ANDROID_HOME:-"$DIR/sdk"}
+export ANDROID_HOME
 
 cat <<EOF
 Configuration environment variables:
@@ -64,11 +78,11 @@ ANDROID_HOME="$ANDROID_HOME"
 EOF
 
 # Export variables required by subprocesses (always prefixed with `OUINET_`).
-export ANDROID_HOME OUINET_MIN_API OUINET_TARGET_API
+export OUINET_MIN_API OUINET_TARGET_API
 
 # Export extra arguments to be forwarded by Gradle to CMake (always prefixed
 # with `CMAKEARG_`).
-export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEARG_OUISYNC_SRC_DIR
+export CMAKEARG_CMAKE_BUILD_TYPE CMAKEARG_WITH_ASAN CMAKEARG_WITH_OUISYNC CMAKEARG_OUISYNC_SRC_DIR CMAKEARG_WITH_I2PD
 
 ######################################################################
 MODES=
@@ -85,6 +99,7 @@ function check_mode {
 ######################################################################
 # Build the Ouinet AAR
 function build_ouinet_aar {
+    echo making aar. If there is daemon started here, it is an error
     GRADLE_BUILDDIR="${DIR}/${OUTPUT_DIR}/ouinet"
     OUINET_VERSION_NAME=$(cat "${ROOT}"/version.txt)
     OUINET_BUILD_ID=$(cd "${ROOT}" && "${ROOT}"/scripts/git-version-string.sh)
@@ -100,7 +115,8 @@ function build_ouinet_aar {
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --console plain \
-        --no-daemon
+        --no-daemon \
+        --info
     )
 }
 
@@ -121,7 +137,8 @@ function publish_ouinet_aar {
         --gradle-user-home "${DIR}"/_gradle-home \
         --project-cache-dir "${GRADLE_BUILDDIR}"/_gradle-cache \
         --console plain \
-        --no-daemon
+        --no-daemon \
+        --info
     )
 }
 

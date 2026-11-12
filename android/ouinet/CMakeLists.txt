@@ -17,7 +17,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_DIR_4}/library_assets/${RUNTIME_DI
 add_compile_options(-Wno-unqualified-std-cast-call)
 
 add_subdirectory(../.. libouinet)
-
 add_library(native-lib SHARED src/main/cpp/native-lib.cpp )
 
 if(WITH_ASAN)
@@ -41,7 +40,7 @@ if(WITH_ASAN)
     target_compile_options(native-lib PUBLIC -fsanitize=address -fno-omit-frame-pointer)
     target_link_options(native-lib PUBLIC -fsanitize=address)
 
-    # Grab libclang_rt.asan-${ARCH_STR}-android.so from the NDK.
+        # Grab libclang_rt.asan-${ARCH_STR}-android.so from the NDK.
     file(GLOB ASAN_GLOB "${HINT_PATH}/../lib/clang/*/lib/linux")
     find_file(ASAN
             NAMES libclang_rt.asan-${ARCH_STR}-android.so
@@ -77,5 +76,20 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy ${LIBCPP_SHARED_PATH} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
 )
 add_custom_target(libcpp_shared ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libc++_shared.so)
-
 add_dependencies(native-lib libcpp_shared)
+
+if (WITH_I2PD)
+    target_link_options(i2pd PRIVATE
+        "-Wl,--enable-new-dtags"
+        "-Wl,-rpath,\$ORIGIN"
+    )
+    set_target_properties(i2pd PROPERTIES
+    SKIP_BUILD_RPATH OFF)
+    add_custom_command(
+        OUTPUT ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:i2pd> ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so
+    )
+    add_custom_target(i2pd_exec ALL DEPENDS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/libexeci2pd.so)
+    add_dependencies(native-lib i2pd)
+    add_dependencies(native-lib i2pd_exec)
+endif()
