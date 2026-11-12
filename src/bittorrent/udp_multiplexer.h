@@ -297,7 +297,8 @@ inline RateLimiter::RateLimiter(const AsioExecutor &executor,
 
 inline void
 RateLimiter::maintain_max_rate_bytes_per_sec(asio::yield_context yield) {
-  if (auto terminated = _cancel.connect([&] { _timer.cancel(); }))
+  auto terminated = _cancel.connect([&] { _timer.cancel(); });
+  if (terminated)
     return;
 
   const auto current_rate = _counter.rate();
