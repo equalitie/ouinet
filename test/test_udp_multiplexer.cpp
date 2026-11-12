@@ -62,3 +62,39 @@ BOOST_DATA_TEST_CASE(test_rate_limiter,
     BOOST_REQUIRE_LT(elapsed_ms, expected_delay_ms);
   });
 }
+
+BOOST_DATA_TEST_CASE(test_rate_limiter_cancellation,
+                     data::make({100u, 200u, 500u}), limit) {
+  asio::io_context ctx;
+  Cancel cancel;
+  auto cancel_delay = 1000;
+
+  asio::spawn(
+      ctx,
+      [&cancel, &cancel_delay,
+       exec = ctx.get_executor()](const asio::yield_context &y) mutable {
+        const auto delay = milliseconds(static_cast<int>(cancel_delay));
+        asio::steady_timer timer{exec};
+        timer.expires_after(delay);
+        timer.async_wait(y);
+        cancel();
+      },
+      check_exception);
+
+  run(ctx, [exec = ctx.get_executor(), limit, &cancel](const Async &yield) {
+    constexpr float current = 2000;
+    constexpr auto expected_delay_ms = 1500;
+    RateCounter counter{};
+    counter.update(current);
+    auto limiter = RateLimiter{exec, counter, limit, cancel};
+
+    const auto start_time = steady_clock::now();
+    limiter.maintain_max_rate_bytes_per_sec(yield.asio_yield());
+    const auto end_time = steady_clock::now();
+
+    const auto elapsed_ms =
+        duration_cast<milliseconds>(end_time - start_time).count();
+    BOOST_REQUIRE(cancel);
+    BOOST_REQUIRE_LT(elapsed_ms, expected_delay_ms);
+  });
+}
