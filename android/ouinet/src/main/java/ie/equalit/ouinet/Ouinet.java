@@ -23,7 +23,6 @@ public class Ouinet {
     // Used to load the 'native-lib' library on application startup.
     public static synchronized void maybeLoadLibraries(Context context) {
         if (libsLoaded) return;
-        System.loadLibrary("ouinet_client");
         System.loadLibrary("native-lib");
         libsLoaded = true;
     }
