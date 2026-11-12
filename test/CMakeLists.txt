@@ -130,6 +130,7 @@ add_test(TARGET test_injector)
 add_test(TARGET test_injector_resolver)
 add_test(TARGET test_dns)
 add_test(TARGET test_fetch)
+add_test(TARGET test_udp_multiplexer)
 
 add_test(TARGET test_i2p)
 add_test(TARGET test_i2p_endpoint)
