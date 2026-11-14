@@ -54,6 +54,21 @@ afterEvaluate {
                 }
             }
         }
+
+        repositories {
+            maven {
+                name = 'GitLab'
+                url = uri("https://gitlab.com/api/v4/projects/${gitlabProjectId}/packages/maven")
+
+                credentials(HttpHeaderCredentials) {
+                    name = 'DEPLOY-TOKEN'
+                    value = '${gitlabToken}'
+                }
+                authentication {
+                    header(HttpHeaderAuthentication)
+                }
+            }
+        }
     }
 }
 
