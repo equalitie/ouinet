@@ -62,7 +62,14 @@ mkdir -p "${DIR}/${OUTPUT_DIR}"
 # Tasks to be run by Gradle when building the AAR.
 # The explicit tasks are needed since there are no `build{Release,Debug}` tasks.
 GRADLE_TASKS="${GRADLE_TASKS:-assemble${GRADLE_VARIANT} lint${GRADLE_VARIANT} test${GRADLE_VARIANT}UnitTest}"
-PUBLISH_TASKS="${PUBLISH_TASKS:-publishToSonatype closeSonatypeStagingRepository}"
+if [ "$MAVEN_REPO" = "central" ]; then
+  PUBLISH_TASKS="publishToSonatype closeSonatypeStagingRepository"
+elif [ "$MAVEN_REPO" = "gitlab" ]; then
+  PUBLISH_TASKS="publishReleasePublicationToGitLabRepository"
+else
+    >&2 echo "Unsupported MAVEN_REPO: '$MAVEN_REPO', valid values are; central, gitlab."
+    exit 1
+fi
 
 # Only set ANDROID_HOME, having ANDROID_SDK_ROOT also set can produce a build error
 unset ANDROID_SDK_ROOT
