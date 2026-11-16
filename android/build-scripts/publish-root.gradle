@@ -23,7 +23,6 @@ if (secretPropsFile.exists()) {
         ext["ossrhPassword"] = System.getenv('OSSRH_PASSWORD')
         ext["sonatypeStagingProfileId"] = System.getenv('SONATYPE_STAGING_PROFILE_ID')
     } else if (System.getenv('MAVEN_REPO') == "gitlab") {
-        ext["gitlabUsername"] = System.getenv('GITLAB_USERNAME')
         ext["gitlabToken"] = System.getenv('GITLAB_TOKEN')
         ext["gitlabProjectId"] = System.getenv('GITLAB_PROJECT_ID')
     }
