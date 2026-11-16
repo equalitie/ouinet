@@ -67,8 +67,7 @@ if [ "$MAVEN_REPO" = "central" ]; then
 elif [ "$MAVEN_REPO" = "gitlab" ]; then
   PUBLISH_TASKS="publishReleasePublicationToGitLabRepository"
 else
-    >&2 echo "Unsupported MAVEN_REPO: '$MAVEN_REPO', valid values are; central, gitlab."
-    exit 1
+  PUBLISH_TASKS=
 fi
 
 # Only set ANDROID_HOME, having ANDROID_SDK_ROOT also set can produce a build error
@@ -172,6 +171,15 @@ done
 
 if [ ! "$MODES" ]; then
     MODES="$DEFAULT_MODES"
+fi
+
+# Check if MAVEN_REPO is allowed when publish mode is selected,
+# this is to not wait until the whole AAR is built to throw an error.
+if check_mode publish; then
+    if [[ -z "${PUBLISH_TASKS}" ]]; then
+      echo "Unsupported MAVEN_REPO: '${MAVEN_REPO}'. Allowed values are; 'central', 'gitlab'."
+      exit 1
+    fi
 fi
 
 if check_mode build; then
