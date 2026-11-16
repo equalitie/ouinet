@@ -61,8 +61,8 @@ afterEvaluate {
                 url = uri("https://gitlab.com/api/v4/projects/${gitlabProjectId}/packages/maven")
 
                 credentials(HttpHeaderCredentials) {
-                    name = 'DEPLOY-TOKEN'
-                    value = '${gitlabToken}'
+                    name = 'Deploy-Token'
+                    value = gitlabToken
                 }
                 authentication {
                     header(HttpHeaderAuthentication)
