@@ -23,6 +23,7 @@ container_duration=1d
 cmake_build_type=Debug
 android_abi=arm64-v8a
 android_publish=n
+maven_repo=
 windows_sign_artifacts=n
 sign_directory=/opt/sign
 cmake_generator="Ninja"
@@ -102,6 +103,7 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --android-publish)
             android_publish=y
+            maven_repo=($2); shift
             cmake_build_type=Release
             ;;
         --windows-sign-artifacts)
@@ -467,6 +469,7 @@ for target_os in ${target_oss[@]}; do
 
         env+=(
           ABI="$android_abi"
+          MAVEN_REPO="$maven_repo"
           WITH_OUISYNC=$([ "$with_ouisync" == y ] && echo ON || echo OFF)
           WITH_ASAN=$([ "$with_asan" == y ] && echo ON || echo OFF)
           WITH_I2PD=$([ "$with_i2pd" == y ] && echo ON || echo OFF)
