@@ -2665,236 +2665,289 @@ void Client::State::start_ouinet() {
 
   constexpr bool ca_auto_updater = true;
   if (ca_auto_updater) {
-    spawn_detached(_ctx.get_executor(), _shutdown_signal, _trace.tag("ca-updater"), [this](Async yield) {
-      Routes routes(*this);
-      Dispatcher dispatcher(yield.get_executor(), routes);
-      const auto download_file =
-        [&yield, this, &dispatcher](
-          const std::string_view url,
-          const std::string_view name,
-          const std::size_t max_file_size
-        ) -> std::optional<std::string> {
-        const auto url_parsed = boost::urls::parse_uri(url);
-        if (!url_parsed) {
-          LOG_ERROR(yield, " Failed to parse url for ", name);
-          return {};
-        }
+    spawn_detached(
+        _ctx.get_executor(), _shutdown_signal, _trace.tag("ca-updater"),
+        [this](Async yield) {
+          Routes routes(*this);
+          Dispatcher dispatcher(yield.get_executor(), routes);
+          const auto download_file =
+              [&yield, this, &dispatcher](const std::string_view url,
+                                          const std::string_view name,
+                                          const std::size_t max_file_size)
+              -> std::optional<std::string> {
+            const auto url_parsed = boost::urls::parse_uri(url);
+            if (!url_parsed) {
+              LOG_ERROR(yield, " Failed to parse url for ", name);
+              return {};
+            }
 
-        Request request{http::verb::get, url_parsed.value(), 11 };
-        request.set(http::field::host, url_parsed->host());
-        const auto route = Route::choose(request, this->_config);
-        if (!route) {
-          LOG_WARN(yield, " Failed to choose route for ", name);
-          return {};
-        }
-        auto response = dispatcher.dispatch(request, *route, yield);
-        if (!response) {
-          LOG_WARN(yield, " Failed to receive response for ", name);
-          return {};
-        }
-        if (response->header().result() != http::status::ok) {
-          LOG_WARN(yield, " Failed to download ", name, ": HTTP ", response->header().result_int());
-          return {};
-        }
+            Request request{http::verb::get, url_parsed.value(), 11};
+            request.set(http::field::host, url_parsed->host());
+            const auto route = Route::choose(request, this->_config);
+            if (!route) {
+              LOG_WARN(yield, " Failed to choose route for ", name);
+              return {};
+            }
+            auto response = dispatcher.dispatch(request, *route, yield);
+            if (!response) {
+              LOG_WARN(yield, " Failed to receive response for ", name);
+              return {};
+            }
+            if (response->header().result() != http::status::ok) {
+              LOG_WARN(yield, " Failed to download ", name, ": HTTP ",
+                       response->header().result_int());
+              return {};
+            }
 
-        auto response_str = std::visit([&](auto& alternative) -> std::optional<std::string> {
-          using Alternative = std::decay_t<decltype(alternative)>;
-          if constexpr (std::is_same_v<Alternative, Dispatcher::Response::FrontEnd>) {
-            LOG_ERROR(" Unexpected code path when fetching ", name);
-            return {};
-          } else {
-            std::string body;
-            const auto append_bytes = [&](const auto& bytes) -> bool {
-              if (bytes->size() > max_file_size || body.size() > max_file_size - bytes->size()) {
-                LOG_ERROR(yield, "Response body for ", name, " exceeds maximum size of ", max_file_size, " bytes");
-                return false;
-              }
-              if (!bytes->empty()) {
-                body.append(reinterpret_cast<const char*>(bytes->data()), bytes->size());
-              }
-              return true;
-            };
-
-            for (;;) {
-              auto part = alternative.session.async_read_part(yield);
-              if (!part.has_value()) {
-                LOG_ERROR(" Error when downloading ", name, ": ", part.error());
-                return {};
-              }
-              if (auto& optional_part = *part; optional_part.has_value()) {
-                if (optional_part->is_body()) {
-                  if (!append_bytes(optional_part->as_body())) {
+            auto response_str = std::visit(
+                [&](auto &alternative) -> std::optional<std::string> {
+                  using Alternative = std::decay_t<decltype(alternative)>;
+                  if constexpr (std::is_same_v<
+                                    Alternative,
+                                    Dispatcher::Response::FrontEnd>) {
+                    LOG_ERROR(" Unexpected code path when fetching ", name);
                     return {};
+                  } else {
+                    std::string body;
+                    const auto append_bytes = [&](const auto &bytes) -> bool {
+                      if (bytes->size() > max_file_size ||
+                          body.size() > max_file_size - bytes->size()) {
+                        LOG_ERROR(yield, "Response body for ", name,
+                                  " exceeds maximum size of ", max_file_size,
+                                  " bytes");
+                        return false;
+                      }
+                      if (!bytes->empty()) {
+                        body.append(
+                            reinterpret_cast<const char *>(bytes->data()),
+                            bytes->size());
+                      }
+                      return true;
+                    };
+
+                    for (;;) {
+                      auto part = alternative.session.async_read_part(yield);
+                      if (!part.has_value()) {
+                        LOG_ERROR(" Error when downloading ", name, ": ",
+                                  part.error());
+                        return {};
+                      }
+                      if (auto &optional_part = *part;
+                          optional_part.has_value()) {
+                        if (optional_part->is_body()) {
+                          if (!append_bytes(optional_part->as_body())) {
+                            return {};
+                          }
+                        } else if (optional_part->is_chunk_body()) {
+                          if (!append_bytes(optional_part->as_chunk_body())) {
+                            return {};
+                          }
+                        }
+                      } else {
+                        break;
+                      }
+                    }
+                    return body;
                   }
-                } else if (optional_part->is_chunk_body()) {
-                  if (!append_bytes(optional_part->as_chunk_body())) {
-                    return {};
-                  }
+                },
+                response.value().value);
+
+            if (!response_str) {
+              LOG_WARN(yield, " Failed to read response body for ", name);
+              return {};
+            }
+            return response_str;
+          };
+
+          constexpr auto cacert_filename = "cacert.pem"sv;
+          constexpr auto cacert_tmp_filename = "cacert.pem.tmp"sv;
+          constexpr auto cacert_checksum_filename = "cacert.pem.sha256"sv;
+          constexpr auto cacert_checksum_file_size_limit = 128;
+          constexpr auto cacert_file_size_limit = 4 * 1024 * 1024;
+
+          constexpr auto retry_after = 6h;
+          constexpr auto retry_after_initial_error = 5s;
+          constexpr auto retry_after_error_max_sleep = 1h;
+
+          bool success = false;
+          bool first_run = true;
+          auto current_timeout_after_error = retry_after_initial_error;
+
+          // @TODO:
+          const fs::path cacert_path =
+              fs::path{"/home/user/proj/repo/cacerts"} / cacert_filename;
+          const fs::path cacert_path_tmp =
+              fs::path{"/home/user/proj/repo/cacerts"} / cacert_tmp_filename;
+
+          std::string hash_of_currently_loaded_cacert;
+          if (auto handle = util::file_io::open_readonly(yield.get_executor(),
+                                                         cacert_path);
+              handle.has_value()) {
+            if (const auto file_size = util::file_io::file_size(handle.value());
+                file_size.has_value()) {
+              if (file_size.value() <= cacert_file_size_limit) {
+                std::string read_buffer;
+                read_buffer.resize(file_size.value(), '\0');
+                if (const auto cacert_data = util::file_io::read(
+                        *handle, asio::buffer(read_buffer), yield);
+                    cacert_data.has_value()) {
+                  hash_of_currently_loaded_cacert =
+                      util::to_hex(util::sha256_digest(read_buffer));
+                } else {
+                  LOG_WARN(yield, " Failed to read cacert file: ",
+                           cacert_data.error());
                 }
               } else {
+                LOG_WARN(yield, " local cacert.pem file size is too big: ",
+                         file_size.value(),
+                         " b, limit is: ", cacert_file_size_limit, " b");
+              }
+            } else {
+              LOG_WARN(yield,
+                       " Failed to read cacert file size: ", file_size.error());
+            }
+          }
+
+          // @TODO: --tls-ca-cert-store-dir /home/user/proj/repo/cacerts
+          while (!was_stopped()) {
+            if (!first_run) {
+              // async_sleep here instead of deep inside while
+              // while(!was_stopped()) {} because here we did not store a lot of
+              // things in memory.
+              if (success) {
+                success = false;
+                current_timeout_after_error = retry_after_initial_error;
+                async_sleep(retry_after, yield);
+              } else {
+                async_sleep(current_timeout_after_error, yield);
+                current_timeout_after_error *= 2;
+                if (current_timeout_after_error > retry_after_error_max_sleep) {
+                  current_timeout_after_error = retry_after_error_max_sleep;
+                }
+              }
+              if (was_stopped()) {
                 break;
               }
             }
-            return body;
-          }
-        }, response.value().value);
+            first_run = false;
 
-        if (!response_str) {
-          LOG_WARN(yield, " Failed to read response body for ", name);
-          return {};
-        }
-        return response_str;
-      };
-
-      constexpr auto cacert_filename = "cacert.pem"sv;
-      constexpr auto cacert_tmp_filename = "cacert.pem.tmp"sv;
-      constexpr auto cacert_checksum_filename = "cacert.pem.sha256"sv;
-      constexpr auto cacert_checksum_file_size_limit = 128;
-      constexpr auto cacert_file_size_limit = 4 * 1024 * 1024;
-
-      constexpr auto retry_after = 6h;
-      constexpr auto retry_after_initial_error = 5s;
-      constexpr auto retry_after_error_max_sleep = 1h;
-
-      bool success = false;
-      bool first_run = true;
-      auto current_timeout_after_error = retry_after_initial_error;
-
-      // @TODO:
-      const fs::path cacert_path = fs::path{ "/home/user/proj/repo/cacerts"} / cacert_filename;
-      const fs::path cacert_path_tmp = fs::path{ "/home/user/proj/repo/cacerts"} / cacert_tmp_filename;
-
-      std::string hash_of_currently_loaded_cacert;
-      if (
-        auto handle = util::file_io::open_readonly(yield.get_executor(), cacert_path);
-        handle.has_value()
-      ) {
-        if (const auto file_size = util::file_io::file_size(handle.value()); file_size.has_value()) {
-          if (file_size.value() <= cacert_file_size_limit) {
-            std::string read_buffer;
-            read_buffer.resize(file_size.value(), '\0');
-            if (const auto cacert_data = util::file_io::read(*handle, asio::buffer(read_buffer), yield); cacert_data.has_value()) {
-              hash_of_currently_loaded_cacert = util::to_hex(util::sha256_digest(read_buffer));
-            } else {
-              LOG_WARN(yield, " Failed to read cacert file: ", cacert_data.error());
-            }
-          } else {
-            LOG_WARN(yield, " local cacert.pem file size is too big: ", file_size.value(), " b, limit is: ", cacert_file_size_limit, " b");
-          }
-        } else {
-          LOG_WARN(yield, " Failed to read cacert file size: ", file_size.error());
-        }
-      }
-
-      // @TODO: --tls-ca-cert-store-dir /home/user/proj/repo/cacerts
-      while (!was_stopped()) {
-        if (!first_run) {
-          // async_sleep here instead of deep inside while while(!was_stopped()) {}
-          // because here we did not store a lot of things in memory.
-          if (success) {
-            success = false;
-            current_timeout_after_error = retry_after_initial_error;
-            async_sleep(retry_after, yield);
-          } else {
-            async_sleep(current_timeout_after_error, yield);
-            current_timeout_after_error *= 2;
-            if (current_timeout_after_error > retry_after_error_max_sleep) {
-              current_timeout_after_error = retry_after_error_max_sleep;
-            }
-          }
-          if (was_stopped()) {
-            break;
-          }
-        }
-        first_run = false;
-
-        const auto downloaded_checksum_file = download_file("https://curl.se/ca/cacert.pem.sha256"sv, cacert_checksum_filename, cacert_checksum_file_size_limit);
-        if (!downloaded_checksum_file) {
-          continue;
-        }
-        // format:
-        // 427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285  cacert.pem\n
-        const auto parse_checksum_file = [&](std::string_view checksum_file_data) -> std::optional<std::string_view> {
-          while (!checksum_file_data.empty() && std::isspace((unsigned char)checksum_file_data.front())) {
-            checksum_file_data.remove_prefix(1);
-          }
-          while (!checksum_file_data.empty()) {
-            // Get line
-            const auto newline_pos = checksum_file_data.find_first_of("\n\r"sv);
-            const std::string_view line = newline_pos == std::string_view::npos ? checksum_file_data : checksum_file_data.substr(0, newline_pos);
-            checksum_file_data.remove_prefix(line.length());
-            while (!checksum_file_data.empty() && std::isspace((unsigned char)checksum_file_data.front())) {
-              checksum_file_data.remove_prefix(1);
-            }
-            // Get hash and filename
-            const auto separator_pos = line.find("  "sv);
-            const bool separator_found = separator_pos != std::string_view::npos && separator_pos != 0;
-            const bool only_one_separator_found = line.find(' ', separator_pos + 2) == std::string_view::npos;
-            if (!separator_found || !only_one_separator_found) {
-              LOG_WARN(yield, " Skipping malformed line from hash check:", line);
+            const auto downloaded_checksum_file = download_file(
+                "https://curl.se/ca/cacert.pem.sha256"sv,
+                cacert_checksum_filename, cacert_checksum_file_size_limit);
+            if (!downloaded_checksum_file) {
               continue;
             }
-            const std::string_view found_filename = line.substr(separator_pos + 2);
-            if (found_filename == cacert_filename) {
-              return line.substr(0, separator_pos);
+            // format:
+            // 427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285
+            // cacert.pem\n
+            const auto parse_checksum_file =
+                [&](std::string_view checksum_file_data)
+                -> std::optional<std::string_view> {
+              while (!checksum_file_data.empty() &&
+                     std::isspace((unsigned char)checksum_file_data.front())) {
+                checksum_file_data.remove_prefix(1);
+              }
+              while (!checksum_file_data.empty()) {
+                // Get line
+                const auto newline_pos =
+                    checksum_file_data.find_first_of("\n\r"sv);
+                const std::string_view line =
+                    newline_pos == std::string_view::npos
+                        ? checksum_file_data
+                        : checksum_file_data.substr(0, newline_pos);
+                checksum_file_data.remove_prefix(line.length());
+                while (
+                    !checksum_file_data.empty() &&
+                    std::isspace((unsigned char)checksum_file_data.front())) {
+                  checksum_file_data.remove_prefix(1);
+                }
+                // Get hash and filename
+                const auto separator_pos = line.find("  "sv);
+                const bool separator_found =
+                    separator_pos != std::string_view::npos &&
+                    separator_pos != 0;
+                const bool only_one_separator_found =
+                    line.find(' ', separator_pos + 2) == std::string_view::npos;
+                if (!separator_found || !only_one_separator_found) {
+                  LOG_WARN(yield,
+                           " Skipping malformed line from hash check:", line);
+                  continue;
+                }
+                const std::string_view found_filename =
+                    line.substr(separator_pos + 2);
+                if (found_filename == cacert_filename) {
+                  return line.substr(0, separator_pos);
+                }
+              }
+              return {};
+            };
+            const auto downloaded_checksum =
+                parse_checksum_file(downloaded_checksum_file.value());
+            if (!downloaded_checksum.has_value()) {
+              continue;
             }
+
+            if (downloaded_checksum.value() ==
+                hash_of_currently_loaded_cacert) {
+              success = true;
+              continue;
+            }
+
+            const auto downloaded_cert_data =
+                download_file("https://curl.se/ca/cacert.pem"sv,
+                              cacert_filename, cacert_file_size_limit);
+            if (!downloaded_cert_data) {
+              continue;
+            }
+
+            // @TODO: convert downloaded_checksum.value() hex data to ints and
+            // compare ints instead of comparing hexadecimals
+            const auto calculated_checksum =
+                util::to_hex(util::sha256_digest(downloaded_cert_data.value()));
+            if (downloaded_checksum.value() != calculated_checksum) {
+              LOG_WARN(yield, " Downloaded file checksum mismatch.");
+              continue;
+            }
+
+            if (auto handle = util::file_io::open_or_create(
+                    yield.get_executor(), cacert_path_tmp);
+                handle.has_value()) {
+              if (const auto res = util::file_io::truncate(*handle, 0);
+                  !res.has_value()) {
+                LOG_ERROR(yield,
+                          " Failed to truncate cacert.pem file: ", res.error());
+                continue;
+              }
+              if (const auto write_result = util::file_io::write(
+                      *handle,
+                      asio::const_buffer{downloaded_cert_data->data(),
+                                         downloaded_cert_data->size()},
+                      yield);
+                  !write_result.has_value()) {
+                LOG_ERROR(yield, " Failed to write cacert.pem file: ",
+                          write_result.error());
+                continue;
+              }
+              handle->close();
+
+              sys::error_code ec;
+              fs::rename(cacert_path_tmp, cacert_path, ec);
+              if (ec) {
+                LOG_ERROR(yield, " Failed to move cacert.pem tmp file: ", ec);
+                continue;
+              }
+            } else {
+              LOG_ERROR(yield, " Failed to open cacert.pem for writing: ",
+                        handle.error());
+              continue;
+            }
+            hash_of_currently_loaded_cacert = downloaded_checksum.value();
+
+            // @TODO: load certs in ouinet
+
+            success = true;
           }
-          return {};
-        };
-        const auto downloaded_checksum = parse_checksum_file(downloaded_checksum_file.value());
-        if (!downloaded_checksum.has_value()) {
-          continue;
-        }
-
-        if (downloaded_checksum.value() == hash_of_currently_loaded_cacert) {
-          success = true;
-          continue;
-        }
-
-        const auto downloaded_cert_data = download_file("https://curl.se/ca/cacert.pem"sv, cacert_filename, cacert_file_size_limit);
-        if (!downloaded_cert_data) {
-          continue;
-        }
-
-        // @TODO: convert downloaded_checksum.value() hex data to ints and compare ints instead of comparing hexadecimals
-        const auto calculated_checksum = util::to_hex(util::sha256_digest(downloaded_cert_data.value()));
-        if (downloaded_checksum.value() != calculated_checksum) {
-          LOG_WARN(yield, " Downloaded file checksum mismatch.");
-          continue;
-        }
-
-        if (auto handle = util::file_io::open_or_create(yield.get_executor(), cacert_path_tmp); handle.has_value()) {
-          if (const auto res = util::file_io::truncate(*handle, 0); !res.has_value()) {
-            LOG_ERROR(yield, " Failed to truncate cacert.pem file: ", res.error());
-            continue;
-          }
-          if (const auto write_result = util::file_io::write(
-            *handle,
-            asio::const_buffer { downloaded_cert_data->data(), downloaded_cert_data->size() },
-            yield
-          ); !write_result.has_value()) {
-            LOG_ERROR(yield, " Failed to write cacert.pem file: ", write_result.error());
-            continue;
-          }
-          handle->close();
-
-          sys::error_code ec;
-          fs::rename(cacert_path_tmp, cacert_path, ec);
-          if (ec) {
-            LOG_ERROR(yield, " Failed to move cacert.pem tmp file: ", ec);
-            continue;
-          }
-        } else {
-          LOG_ERROR(yield, " Failed to open cacert.pem for writing: ", handle.error());
-          continue;
-        }
-        hash_of_currently_loaded_cacert = downloaded_checksum.value();
-
-        // @TODO: load certs in ouinet
-
-        success = true;
-      }
-    });
+        });
   }
 }
 
