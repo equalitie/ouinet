@@ -74,13 +74,19 @@ std::expected<native_handle_t, sys::error_code> dup_fd(async_file_handle &) {
 std::expected<void, sys::error_code> truncate(async_file_handle &f,
                                               size_t new_length) {
   sys::error_code ec;
-  f.resize(new_length);
-  // Move to cursor to the end only when the previous position was in the
-  // truncated area
-  if (new_length < f.seek(0, async_file_handle::seek_basis::seek_cur, ec))
-    f.seek(static_cast<int64_t>(new_length), async_file_handle::seek_set, ec);
+  f.resize(new_length, ec);
   if (ec)
     return std::unexpected(ec);
+  // Move to cursor to the end only when the previous position was in the
+  // truncated area
+  const size_t current_pos = f.seek(0, async_file_handle::seek_basis::seek_cur, ec);
+  if (ec)
+    return std::unexpected(ec);
+  if (new_length < current_pos) {
+    f.seek(static_cast<int64_t>(new_length), async_file_handle::seek_set, ec);
+    if (ec)
+      return std::unexpected(ec);
+  }
   return {};
 }
 

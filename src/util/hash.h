@@ -192,4 +192,18 @@ inline SHA512::digest_type sha512_digest(const Arg &arg, const Rest &...rest) {
   return SHA512::digest(arg, rest...);
 }
 
+template <typename Digest>
+std::string to_hex(const Digest& digest) {
+  std::string result;
+  result.reserve(digest.size() * 2);
+
+  for (uint8_t byte: digest) {
+    constexpr char hex_chars[] = "0123456789abcdef";
+    result.push_back(hex_chars[(byte >> 4) & 0x0f]);
+    result.push_back(hex_chars[byte & 0x0f]);
+  }
+
+  return result;
+}
+
 } // namespace ouinet::util
