@@ -79,7 +79,8 @@ std::expected<void, sys::error_code> truncate(async_file_handle &f,
     return std::unexpected(ec);
   // Move to cursor to the end only when the previous position was in the
   // truncated area
-  const size_t current_pos = f.seek(0, async_file_handle::seek_basis::seek_cur, ec);
+  const size_t current_pos =
+      f.seek(0, async_file_handle::seek_basis::seek_cur, ec);
   if (ec)
     return std::unexpected(ec);
   if (new_length < current_pos) {
