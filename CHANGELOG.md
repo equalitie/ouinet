@@ -8,6 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+## [v1.8.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.8.0) - 2026-11-18
+
+### Added
+
+- Support building Ouisync into Ouinet for Android. !234
+- Multiple metrics servers. !201
+- Add priority tiers for metrics servers, with tests. !210
+- Add TLS for Proxy and Frontend. Add CSRF protection to frontend. !194
+- Add UPnP and local-peer-discovery toggles. !221
+- Add multi chunk payload test to `test_tcp_cache` python integration test. !208
+- Test client fetching content from injector. !226
+- Test the build of Ouinet prod container images using the CI. !211
+- Add more tests in asio-utp and fix bugs which the tests exposed. !237
+- Publish Android artifacts to GitLab Package Registry. !243
+
+### Changed
+
+- Update asio-utp to fix `socket_impl::close_with_error`. !240
+- Updates to JNI. !230
+- Build the iOS client as an xcframework. !217
+- Allow choosing I2P service. !212
+- CI release artifacts. !207
+- Exempt /ca.pem from front-end authentication. !225
+- Include `bt_bep5` in the bundle of linux artifacts. !214
+- Use CMake ProcessorCount instead of nproc for boost -j. !216
+- Refactor Android build script. !235
+- Automatic formatting of CPP sources. !241
+
+### Removed
+
+- Remove `android-ifaddrs` dependency from i2p. !239
+- Remove linker and support building i2pd executable into android binary. !232
+
+### Fixed
+
+- Fix and update logs and update python tests so they work also on SAM branch. !233
+- Fix block fetching + various improvements. !202
+- Fix `bt_extra_bootstraps` front-end query parameter mismatch. !195 !215
+- Fix cancellation in `Bep5Client::connect`. !229
+- Fix few memory access and timeout related errors. !231
+- Fix inverted @-prefix handling of `--metrics-server-cacert`. !218
+- Fix rate limiting timer. !242
+- Fix segfault in DhtNode when processing BEP5 queries. !236
+- Fix signatures of blocks received from other peers. !228
+- Install android sdk outside of source directory. !238
+- Fix metrics server TLS CA cert being parsed as a file path in iOS. !220
+- Expose missing ClientConfig options and fix renamed CLI flags in iOS. !219
+
+
 ## [v1.7.1](https://gitlab.com/equalitie/ouinet/-/releases/v1.7.1) - 2026-07-03
 
 ### Fixed
