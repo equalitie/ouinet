@@ -79,6 +79,21 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
         toolset=clang-${BOOST_ARCH}
         abi=${BOOST_ABI}
     )
+
+    # Boost.Process v2 detects `close_range` and `pidfd_open` from the NDK
+    # headers, but Android's app seccomp filter blocks them at runtime and the
+    # process is killed with SIGSYS instead of getting ENOSYS. `pidfd_open` is
+    # blocked up to API 29, `close_range` on API 30 and later too. Use the
+    # portable fallbacks instead. These must match between the Boost build
+    # (`close_range` is used in the compiled libboost_process) and the code
+    # using Boost (`pidfd_open` is header-only), see `Boost::boost` below.
+    set(OUINET_BOOST_ANDROID_DEFINITIONS
+        BOOST_PROCESS_V2_POSIX_FORCE_DISABLE_CLOSE_RANGE
+        BOOST_PROCESS_V2_DISABLE_PIDFD_OPEN
+    )
+    foreach (def ${OUINET_BOOST_ANDROID_DEFINITIONS})
+        list(APPEND OUINET_BOOST_CXXFLAGS -D${def})
+    endforeach()
 elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     set(BOOST_ARCH_CONFIGURATION
         address-model=64
@@ -239,7 +254,7 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
     # instead of the implicit __ANDROID__ one.
     # https://github.com/boostorg/beast/blob/44f37d1a11d/include/boost/beast/core/impl/file_posix.ipp#L27
     set_target_properties(Boost::boost PROPERTIES
-        INTERFACE_COMPILE_DEFINITIONS "ANDROID"
+        INTERFACE_COMPILE_DEFINITIONS "ANDROID;${OUINET_BOOST_ANDROID_DEFINITIONS}"
     )
 endif()
 
