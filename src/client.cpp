@@ -2759,6 +2759,57 @@ void Client::State::start_ouinet() {
             return response_str;
           };
 
+          struct CACERT_Timestamp {
+            std::string timezone;
+            std::chrono::local_seconds timestamp;
+          };
+          const auto parse_cacert_timestamp =
+              [&yield](const std::string_view cacert_data)
+              -> std::optional<CACERT_Timestamp> {
+            // clang-format off
+            // NOLINTNEXTLINE
+            // cacert.pem contains a line of this format: ## Certificate data from Mozilla as of: Thu Nov  5 04:12:01 2026 GMT
+            // clang-format on
+            constexpr auto prefix = "## Certificate data from Mozilla as of:"sv;
+
+            const auto prefix_pos = cacert_data.find(prefix);
+            if (prefix_pos == std::string::npos)
+              return {};
+            const auto timestamp_begin = prefix_pos + prefix.length();
+            const auto timestamp_end =
+                cacert_data.find_first_of("\r\n", timestamp_begin);
+            if (timestamp_end == std::string::npos)
+              return {};
+
+            auto timestamp_str = cacert_data.substr(
+                timestamp_begin, timestamp_end - timestamp_begin);
+            while (timestamp_str.starts_with(' '))
+              timestamp_str.remove_prefix(1);
+            while (timestamp_str.ends_with(' '))
+              timestamp_str.remove_suffix(1);
+            if (timestamp_str.empty())
+              return {};
+
+            std::istringstream input{std::string{timestamp_str}};
+            input.imbue(std::locale::classic());
+
+            CACERT_Timestamp result;
+            if (std::chrono::from_stream(input, "%a %b %e %T %Y",
+                                         result.timestamp)
+                    .fail()) {
+              LOG_ERROR(yield, " Failed to parse cacert timestamp. Input: ",
+                        timestamp_str);
+              return {};
+            }
+            if (!(input >> result.timezone)) {
+              LOG_WARN(yield,
+                       " Failed to parse cacert timestamp timezone. Input: ",
+                       timestamp_str);
+              result.timezone = "";
+            }
+            return result;
+          };
+
           constexpr auto cacert_filename = "cacert.pem"sv;
           constexpr auto cacert_tmp_filename = "cacert.pem.tmp"sv;
           constexpr auto cacert_checksum_filename = "cacert.pem.sha256"sv;
@@ -2780,6 +2831,7 @@ void Client::State::start_ouinet() {
               fs::path{"/home/user/proj/repo/cacerts"} / cacert_tmp_filename;
 
           std::string hash_of_currently_loaded_cacert;
+          std::optional<CACERT_Timestamp> timestamp_of_currently_loaded_cacert;
           if (auto handle = util::file_io::open_readonly(yield.get_executor(),
                                                          cacert_path);
               handle.has_value()) {
@@ -2793,6 +2845,8 @@ void Client::State::start_ouinet() {
                     cacert_data.has_value()) {
                   hash_of_currently_loaded_cacert =
                       util::to_hex(util::sha256_digest(read_buffer));
+                  timestamp_of_currently_loaded_cacert =
+                      parse_cacert_timestamp(read_buffer);
                 } else {
                   LOG_WARN(yield, " Failed to read cacert file: ",
                            cacert_data.error());
@@ -2837,9 +2891,7 @@ void Client::State::start_ouinet() {
             if (!downloaded_checksum_file) {
               continue;
             }
-            // format:
-            // 427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285
-            // cacert.pem\n
+            // format: checksum, 2 spaces, filename, \n newline
             const auto parse_checksum_file =
                 [&](std::string_view checksum_file_data)
                 -> std::optional<std::string_view> {
@@ -2909,6 +2961,42 @@ void Client::State::start_ouinet() {
               continue;
             }
 
+            const auto downloaded_cacert_timestamp =
+                parse_cacert_timestamp(downloaded_cert_data.value());
+            bool accept_new_timestamp = false;
+            if (!timestamp_of_currently_loaded_cacert.has_value() ||
+                !downloaded_cacert_timestamp.has_value()) {
+              LOG_WARN(yield, " Accepting potentially outdated cacert. "
+                              "Timestamps unavailable.");
+              accept_new_timestamp = true;
+            } else if (timestamp_of_currently_loaded_cacert->timezone ==
+                       downloaded_cacert_timestamp->timezone) {
+              if (downloaded_cacert_timestamp->timestamp >=
+                  timestamp_of_currently_loaded_cacert->timestamp) {
+                accept_new_timestamp = true;
+              } else {
+                LOG_WARN(yield, " Discarding outdated cacert");
+              }
+            } else {
+              constexpr auto max_gap_between_two_timezones =
+                  std::chrono::hours{26};
+              if (downloaded_cacert_timestamp->timestamp -
+                      max_gap_between_two_timezones >
+                  timestamp_of_currently_loaded_cacert->timestamp) {
+                accept_new_timestamp = true;
+              } else if (downloaded_cacert_timestamp->timestamp +
+                             max_gap_between_two_timezones >=
+                         timestamp_of_currently_loaded_cacert->timestamp) {
+                LOG_WARN(yield, " Accepting potentially outdated cacert with "
+                                "mismatching timezones");
+                accept_new_timestamp = true;
+              } else {
+                LOG_WARN(yield, " Discarding outdated cacert");
+              }
+            }
+            if (!accept_new_timestamp)
+              continue;
+
             if (auto handle = util::file_io::open_or_create(
                     yield.get_executor(), cacert_path_tmp);
                 handle.has_value()) {
@@ -2942,7 +3030,7 @@ void Client::State::start_ouinet() {
               continue;
             }
             hash_of_currently_loaded_cacert = downloaded_checksum.value();
-
+            timestamp_of_currently_loaded_cacert = downloaded_cacert_timestamp;
             // @TODO: load certs in ouinet
 
             success = true;
