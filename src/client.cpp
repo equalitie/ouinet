@@ -2663,6 +2663,8 @@ void Client::State::start_ouinet() {
 
   get_or_create_i2p_service();
 
+  // @TODO: --tls-ca-cert-store-dir /home/user/proj/repo/cacerts
+  // @TODO:
   constexpr bool ca_auto_updater = true;
   if (ca_auto_updater) {
     spawn_detached(
@@ -2830,7 +2832,7 @@ void Client::State::start_ouinet() {
           const fs::path cacert_path_tmp =
               fs::path{"/home/user/proj/repo/cacerts"} / cacert_tmp_filename;
 
-          std::string hash_of_currently_loaded_cacert;
+          util::SHA256::digest_type hash_of_currently_loaded_cacert;
           std::optional<CACERT_Timestamp> timestamp_of_currently_loaded_cacert;
           if (auto handle = util::file_io::open_readonly(yield.get_executor(),
                                                          cacert_path);
@@ -2844,7 +2846,7 @@ void Client::State::start_ouinet() {
                         *handle, asio::buffer(read_buffer), yield);
                     cacert_data.has_value()) {
                   hash_of_currently_loaded_cacert =
-                      util::to_hex(util::sha256_digest(read_buffer));
+                      util::sha256_digest(read_buffer);
                   timestamp_of_currently_loaded_cacert =
                       parse_cacert_timestamp(read_buffer);
                 } else {
@@ -2862,7 +2864,6 @@ void Client::State::start_ouinet() {
             }
           }
 
-          // @TODO: --tls-ca-cert-store-dir /home/user/proj/repo/cacerts
           while (!was_stopped()) {
             if (!first_run) {
               // async_sleep here instead of deep inside while
@@ -2894,7 +2895,7 @@ void Client::State::start_ouinet() {
             // format: checksum, 2 spaces, filename, \n newline
             const auto parse_checksum_file =
                 [&](std::string_view checksum_file_data)
-                -> std::optional<std::string_view> {
+                -> std::optional<util::SHA256::digest_type> {
               while (!checksum_file_data.empty() &&
                      std::isspace((unsigned char)checksum_file_data.front())) {
                 checksum_file_data.remove_prefix(1);
@@ -2928,7 +2929,8 @@ void Client::State::start_ouinet() {
                 const std::string_view found_filename =
                     line.substr(separator_pos + 2);
                 if (found_filename == cacert_filename) {
-                  return line.substr(0, separator_pos);
+                  return util::from_hex<util::SHA256::digest_type>(
+                      line.substr(0, separator_pos));
                 }
               }
               return {};
@@ -2952,10 +2954,8 @@ void Client::State::start_ouinet() {
               continue;
             }
 
-            // @TODO: convert downloaded_checksum.value() hex data to ints and
-            // compare ints instead of comparing hexadecimals
             const auto calculated_checksum =
-                util::to_hex(util::sha256_digest(downloaded_cert_data.value()));
+                util::sha256_digest(downloaded_cert_data.value());
             if (downloaded_checksum.value() != calculated_checksum) {
               LOG_WARN(yield, " Downloaded file checksum mismatch.");
               continue;

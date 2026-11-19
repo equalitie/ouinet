@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <charconv>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -196,12 +197,34 @@ template <typename Digest> std::string to_hex(const Digest &digest) {
   std::string result;
   result.reserve(digest.size() * 2);
 
-  for (uint8_t byte : digest) {
+  for (const uint8_t byte : digest) {
     constexpr char hex_chars[] = "0123456789abcdef";
     result.push_back(hex_chars[(byte >> 4) & 0x0f]);
     result.push_back(hex_chars[byte & 0x0f]);
   }
 
+  return result;
+}
+
+template <typename Digest>
+std::optional<Digest> from_hex(const std::string_view hex) {
+  Digest result{};
+
+  if (hex.size() != result.size() * 2) {
+    // Invalid hex length
+    throw std::nullopt;
+  }
+
+  for (size_t i = 0; i < result.size(); ++i) {
+    const char *first = hex.data() + i * 2;
+    const char *last = first + 2;
+
+    const auto [ptr, ec] = std::from_chars(first, last, result[i], 16);
+    if (ec != std::errc{} || ptr != last) {
+      // Invalid hex
+      return {};
+    }
+  }
   return result;
 }
 
