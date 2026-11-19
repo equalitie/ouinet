@@ -352,7 +352,9 @@ public:
 
   const Trace &trace_root() const { return _trace_root; }
 
-  std::string_view tls_ca_cert_store_dir() const { return _tls_ca_cert_store_dir; }
+  std::string_view tls_ca_cert_store_dir() const {
+    return _tls_ca_cert_store_dir;
+  }
 
 #undef CHANGE_AND_SAVE_OPS
 #undef CHANGE_AND_SAVE
