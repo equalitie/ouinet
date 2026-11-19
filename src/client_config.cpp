@@ -816,6 +816,9 @@ ClientConfig::ClientConfig(int argc, const char *argv[]) {
 
   {
     _origin_ssl_ctx.set_verify_mode(asio::ssl::verify_peer);
+    if (_tls_ca_cert_store_dir.empty())
+      LOG_INFO("--tls-ca-cert-store-dir unset. Will be using CA certificates "
+               "provided by the system");
     ssl::util::load_tls_ca_certificates(_origin_ssl_ctx,
                                         _tls_ca_cert_store_dir);
     for (auto &verify_file : _tls_ca_cert_store_files) {

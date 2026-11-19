@@ -2663,15 +2663,44 @@ void Client::State::start_ouinet() {
 
   get_or_create_i2p_service();
 
-  // @TODO: --tls-ca-cert-store-dir /home/user/proj/repo/cacerts
   // @TODO:
   constexpr bool ca_auto_updater = true;
   if (ca_auto_updater) {
     spawn_detached(
         _ctx.get_executor(), _shutdown_signal, _trace.tag("ca-updater"),
         [this](Async yield) {
+          constexpr auto cacert_filename = "cacert.pem"sv;
+          constexpr auto cacert_tmp_filename = "cacert.pem.tmp"sv;
+          constexpr auto cacert_checksum_filename = "cacert.pem.sha256"sv;
+          constexpr auto cacert_checksum_file_size_limit = 128;
+          constexpr auto cacert_file_size_limit = 4 * 1024 * 1024;
+
+          constexpr auto retry_after = 6h;
+          constexpr auto retry_after_initial_error = 5s;
+          constexpr auto retry_after_error_max_sleep = 1h;
+
+          const auto tls_ca_cert_store_dir = _config.tls_ca_cert_store_dir();
+          if (tls_ca_cert_store_dir.empty()) {
+            LOG_ERROR(yield, " Updater disabled because current configuration "
+                             "uses system provided certificates");
+            return;
+          }
+          fs::path cacert_path{tls_ca_cert_store_dir};
+          if (!fs::exists(cacert_path)) {
+            LOG_ERROR(
+                yield,
+                " Updater disabled because current cacert cannot be found");
+            return;
+          }
+          if (fs::is_directory(cacert_path)) {
+            cacert_path /= cacert_filename;
+          }
+          fs::path cacert_path_tmp =
+              cacert_path.parent_path() / cacert_tmp_filename;
+
           Routes routes(*this);
           Dispatcher dispatcher(yield.get_executor(), routes);
+
           const auto download_file =
               [&yield, this, &dispatcher](const std::string_view url,
                                           const std::string_view name,
@@ -2683,6 +2712,7 @@ void Client::State::start_ouinet() {
               return {};
             }
 
+            // @TODO: follow redirects in case there's changes to CDN
             Request request{http::verb::get, url_parsed.value(), 11};
             request.set(http::field::host, url_parsed->host());
             const auto route = Route::choose(request, this->_config);
@@ -2812,25 +2842,9 @@ void Client::State::start_ouinet() {
             return result;
           };
 
-          constexpr auto cacert_filename = "cacert.pem"sv;
-          constexpr auto cacert_tmp_filename = "cacert.pem.tmp"sv;
-          constexpr auto cacert_checksum_filename = "cacert.pem.sha256"sv;
-          constexpr auto cacert_checksum_file_size_limit = 128;
-          constexpr auto cacert_file_size_limit = 4 * 1024 * 1024;
-
-          constexpr auto retry_after = 6h;
-          constexpr auto retry_after_initial_error = 5s;
-          constexpr auto retry_after_error_max_sleep = 1h;
-
           bool success = false;
           bool first_run = true;
           auto current_timeout_after_error = retry_after_initial_error;
-
-          // @TODO:
-          const fs::path cacert_path =
-              fs::path{"/home/user/proj/repo/cacerts"} / cacert_filename;
-          const fs::path cacert_path_tmp =
-              fs::path{"/home/user/proj/repo/cacerts"} / cacert_tmp_filename;
 
           util::SHA256::digest_type hash_of_currently_loaded_cacert;
           std::optional<CACERT_Timestamp> timestamp_of_currently_loaded_cacert;
