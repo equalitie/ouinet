@@ -730,3 +730,56 @@ BOOST_DATA_TEST_CASE(test_fetching_private_route_many_times,
     client.stop();
   });
 }
+
+BOOST_AUTO_TEST_CASE(test_client_frontend_set_origin_access) {
+  asio::io_context ctx;
+
+  TestDir root;
+
+  const std::string injector_credentials = "username:password";
+
+  const std::string frontend_token = "0123456789AaBbCcDdEeFfGgHhI";
+
+  HttpServer server(ctx.get_executor(), root.make_subdir("server").path());
+
+  Client client(ctx, make_config<ClientConfig>({
+                         "./no_client_exec"s,
+                         "--log-level=DEBUG"s,
+                         "--repo"s,
+                         root.make_subdir("client").string(),
+                         // Bind to random ports to avoid clashes
+                         "--listen-on-tcp=127.0.0.1:8077"s,
+                         "--front-end-ep=127.0.0.1:8078"s,
+                         "--front-end-access-token="s +
+                             frontend_token,
+                         "--tls-ca-cert-store-file="s +
+                             server.certificate_path().string(),
+                         "--bt-bootstrap-no-default",
+                         "--trace-root=client",
+                     }));
+
+  // Clients are started explicitly
+  client.start();
+
+  run(ctx, [&, server = std::move(server)](Async yield) mutable {
+    auto url =
+        util::Url::from("http://127.0.0.1:8078/?origin_access=disable"s).value();
+
+    auto rq = CacheRequestBuilder(url).build();
+
+    rq.set("X-Ouinet-Front-End-Token", frontend_token);
+    rq.erase(http_::request_group_hdr);
+
+    auto rs1 = unwrap(timeout(
+        30s,
+        [&](Async yield) { return fetch_through_client(client, rq, yield); },
+        yield));
+
+    BOOST_REQUIRE_EQUAL(rs1.result(), http::status::ok);
+    BOOST_REQUIRE_EQUAL(rs1[http_::response_source_hdr],
+                        http_::response_source_hdr_front_end);
+    // TODO: inspect body to confirm API request took effect
+
+    client.stop();
+  });
+}
