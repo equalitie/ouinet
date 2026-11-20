@@ -25,7 +25,6 @@ or entirely isolated network environments.
 
 Ouinet under gone a rigorous security audit by 7ASecurity with support from the
 [Open Technology Fund](https://www.opentech.fund/security-safety-audits/ouinet-ceno/).
-
 Find the full audit report included in this repo, [OUI-01-Ouinet-Audit-Public-RC1.2b.pdf](./doc/audits/OUI-01-Ouinet-Audit-Public-RC1.2b.pdf).
 
 
