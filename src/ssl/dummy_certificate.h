@@ -21,6 +21,7 @@ public:
 
   DummyCertificate(DummyCertificate &&);
   DummyCertificate &operator=(DummyCertificate &&);
+  X509_NAME *get_subject_name() const;
 
   const std::string &pem_certificate() const { return _pem_certificate; }
 

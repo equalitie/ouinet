@@ -37,7 +37,7 @@ DummyCertificate::DummyCertificate(CACertificate &ca_cert, const string &cn)
   // CN: no wildcard for IPs
   const string wc_cn = is_ip ? cn : ("*." + cn);
 
-  X509_NAME *name = X509_get_subject_name(_x);
+  X509_NAME *name = get_subject_name();
 
   if (!X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
                                   (const unsigned char *)wc_cn.data(),
@@ -86,4 +86,9 @@ DummyCertificate &DummyCertificate::operator=(DummyCertificate &&other) {
   _pem_certificate = std::move(other._pem_certificate);
 
   return *this;
+}
+
+X509_NAME *DummyCertificate::get_subject_name() const {
+  auto name = X509_get_subject_name(_x);
+  return X509_NAME_dup(name);
 }

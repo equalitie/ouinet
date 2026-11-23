@@ -101,7 +101,7 @@ BaseCertificate::BaseCertificate(const std::string &cn, bool is_ca)
   X509_gmtime_adj(X509_get_notAfter(_x), 15 * ssl::util::ONE_YEAR);
   X509_set_pubkey(_x, _pk);
 
-  X509_NAME *name = X509_get_subject_name(_x);
+  X509_NAME *name = get_subject_name();
 
   // This function creates and adds the entry, working out the
   // correct string type and performing checks on its length.
@@ -180,7 +180,8 @@ BaseCertificate::BaseCertificate(std::string pem_cert, std::string pem_key,
 }
 
 X509_NAME *BaseCertificate::get_subject_name() const {
-  return X509_get_subject_name(_x);
+  auto name = X509_get_subject_name(_x);
+  return X509_NAME_dup(name);
 }
 
 EVP_PKEY *BaseCertificate::get_private_key() const { return _pk; }
