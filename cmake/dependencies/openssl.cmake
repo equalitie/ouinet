@@ -87,7 +87,7 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     externalproject_add(built_openssl
         URL ${OPENSSL_URL}
         URL_HASH ${OPENSSL_URL_HASH}
