@@ -94,7 +94,6 @@ elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Darwi
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
