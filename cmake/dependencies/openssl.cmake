@@ -7,8 +7,10 @@ if (NOT "${CMAKE_GENERATOR}" STREQUAL "Ninja" AND NOT "${CMAKE_GENERATOR}" STREQ
     set(INSTALL_JOB_SERVER_AWARE INSTALL_JOB_SERVER_AWARE YES)
 endif()
 
+message("CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
 set(OPENSSL_VERSION_Android "3.6.0")
 set(OPENSSL_VERSION_iOS     "3.6.0")
+set(OPENSSL_VERSION_Darwin  "3.6.0")
 set(OPENSSL_VERSION_Windows "3.6.0")
 set(OPENSSL_VERSION ${OPENSSL_VERSION_${CMAKE_SYSTEM_NAME}})
 
@@ -25,6 +27,8 @@ if (DEFINED OPENSSL_VERSION)
     set(OPENSSL_TARGET_Android_aarch64    "android-arm64")
     set(OPENSSL_TARGET_Android_i686       "android-x86")
     set(OPENSSL_TARGET_Android_x86_64     "android-x86_64")
+    set(OPENSSL_TARGET_Darwin_aarch64     "darwin64-arm64-cc")
+    set(OPENSSL_TARGET_Darwin_x86_64      "darwin64-x86_84-cc")
     set(OPENSSL_TARGET_iOS_OS64           "ios64-xcrun")
     set(OPENSSL_TARGET_iOS_SIMULATOR64    "darwin64-x86_64-cc")
     set(OPENSSL_TARGET_iOS_SIMULATORARM64 "iossimulator-xcrun")
@@ -32,6 +36,7 @@ if (DEFINED OPENSSL_VERSION)
 
     set(TARGET_KEY_Android ${CMAKE_SYSTEM_PROCESSOR})
     set(TARGET_KEY_iOS     ${PLATFORM})
+    set(TARGET_KEY_Darwin  ${CMAKE_SYSTEM_PROCESSOR})
     set(TARGET_KEY         ${TARGET_KEY_${CMAKE_SYSTEM_NAME}})
 
     set(OPENSSL_TARGET ${OPENSSL_TARGET_${CMAKE_SYSTEM_NAME}_${TARGET_KEY}})
@@ -87,14 +92,13 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Android")
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && make install_dev
     )
-elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     externalproject_add(built_openssl
         URL ${OPENSSL_URL}
         URL_HASH ${OPENSSL_URL_HASH}
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}/openssl"
         CONFIGURE_COMMAND
                cd ${CMAKE_CURRENT_BINARY_DIR}/openssl/src/built_openssl
-            && export ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
             && export PATH=${COMPILER_DIR}:$ENV{PATH}
             && ./Configure
                 ${OPENSSL_TARGET}
