@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Minor adjustments to README and added security audit doc to repo. !245
+- Expose i2pd exe as artifact from docker build. !245
+
+### Fixed
+
+- Fixed crash in Android when using i2pd executable by disabling `close_range`
+and `pidfd_open` in `Boost.Process`. !244
+- Use OpenSSL v3.6.0 when building Ouinet for MacOS. !246
+
 
 ## [v1.8.0](https://gitlab.com/equalitie/ouinet/-/releases/v1.8.0) - 2026-11-18
 
